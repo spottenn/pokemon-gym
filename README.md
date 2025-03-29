@@ -1,44 +1,10 @@
-# PokemonEval
+# PokemonEval Server
 
-A benchmark environment for evaluating AI agents on Pokemon Red gameplay.
+A server for evaluating AI agents on Pokemon Red gameplay.
 
 ## Overview
 
-PokemonEval is a framework for evaluating AI agents on Pokemon Red. The framework provides:
-- A clean interface for agents to interact with Pokemon Red via the PyBoy emulator
-- Tools for measuring agent performance and collecting metrics
-- A separation of the environment from agent logic, allowing for fair comparisons
-- A server-client architecture for remote agent evaluation
-
-## Project Structure
-
-```
-PokemonEval/
-├── agent/                   # Agent implementations
-│   ├── __init__.py
-│   ├── base_agent.py        # Abstract base class for agents
-│   ├── simple_agent.py      # A simple Claude-based agent
-│   ├── client.py            # Client for connecting to the evaluator server
-│   └── server_agent.py      # Agent that interacts with the evaluator server
-├── benchmark/               # Benchmarking utilities
-│   ├── __init__.py
-│   └── evaluator.py         # Agent evaluation
-├── pokemon_env/             # Pokemon environment
-│   ├── __init__.py
-│   ├── action.py            # Action classes (PressKey, Wait)
-│   ├── emulator.py          # Low-level emulator interface
-│   ├── environment.py       # High-level environment interface
-│   └── memory_reader.py     # Read game state from memory
-├── server/                  # Server components
-│   ├── __init__.py
-│   ├── evaluator_server.py  # FastAPI server for remote evaluation
-│   └── README.md            # Server documentation
-├── main.py                  # Main application entry point
-├── run_benchmark.py         # Script to run benchmarks
-├── server.py                # Script to run the evaluator server
-├── config.py                # Configuration
-└── requirements.txt         # Dependencies
-```
+The PokemonEval server provides a RESTful API for agents to interact with Pokemon Red via the PyBoy emulator. This server component handles game state management, action execution, and provides a clean interface for remote evaluation of agents.
 
 ## Installation
 
@@ -55,40 +21,11 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-3. Place a Pokemon Red ROM file in the root directory (or specify its path with `--rom`).
+3. Place a Pokemon Red ROM file in the root directory or specify its path with `--rom`.
 
-## Running an Agent
+## Starting the Server
 
-```bash
-python main.py --rom pokemon.gb --steps 100 --display
-```
-
-Command-line arguments:
-- `--rom`: Path to the Pokemon ROM file (default: "pokemon.gb")
-- `--steps`: Number of agent steps to run (default: 10)
-- `--display`: Run with display (not headless)
-- `--sound`: Enable sound (only applicable with display)
-- `--model`: Claude model to use (default: "claude-3-7-sonnet-20250219")
-- `--temperature`: Temperature parameter for Claude (default: 1.0)
-- `--max-tokens`: Maximum number of tokens for Claude (default: 4000)
-
-## Running Benchmarks
-
-```bash
-python run_benchmark.py --rom pokemon.gb --steps 50 --output-dir results
-```
-
-Command-line arguments:
-- `--rom`: Path to the Pokemon ROM file (default: "pokemon.gb")
-- `--steps`: Number of steps to run for evaluation (default: 50)
-- `--display`: Run with display (not headless)
-- `--sound`: Enable sound (only applicable with display)
-- `--output-dir`: Directory to save benchmark results (default: "benchmark_results")
-- `--model`: Claude model to use (default: "claude-3-7-sonnet-20250219")
-
-## Running the Evaluator Server
-
-The evaluator server provides a RESTful API for remote agent evaluation:
+Run the server with:
 
 ```bash
 python server.py --host 0.0.0.0 --port 8000 --rom pokemon.gb
@@ -100,64 +37,209 @@ Command-line arguments:
 - `--rom`: Path to the Pokemon ROM file (default: "pokemon.gb")
 - `--reload`: Enable auto-reload for development
 
-Once the server is running, you can interact with it using the provided client:
+## Server API
 
-```bash
-python -m agent.server_agent --steps 10 --server http://localhost:8000
+### Initialize Environment
+
+```
+POST /initialize
 ```
 
-For more details about the server API and client usage, see the [server documentation](server/README.md).
-
-## Creating Your Own Agent
-
-To create your own agent, extend the `BaseAgent` class:
-
-```python
-from agent.base_agent import BaseAgent
-from pokemon_env.environment import GameState
-from pokemon_env.action import Action, PressKey
-
-class MyAgent(BaseAgent):
-    def __init__(self):
-        # Initialize your agent
-        pass
-    
-    def get_action(self, state: GameState) -> Action:
-        # Process the game state and decide on an action
-        return PressKey(keys=["a"])
-    
-    def on_episode_start(self) -> None:
-        # Called when a new episode starts
-        pass
-    
-    def on_episode_end(self) -> None:
-        # Called when an episode ends
-        pass
+Request body:
+```json
+{
+  "headless": true,
+  "sound": false
+}
 ```
 
-### Using the Server Client
+Response:
+```json
+{
+  "player_name": "RED",
+  "rival_name": "BLUE",
+  "money": 3000,
+  "location": "PALLET TOWN",
+  "coordinates": [5, 6],
+  "badges": ["BOULDER", "CASCADE"],
+  "valid_moves": ["up", "down", "left", "right"],
+  "inventory": [
+    {"item": "POTION", "quantity": 3},
+    {"item": "POKEBALL", "quantity": 5}
+  ],
+  "dialog": "PROF.OAK: Hello, welcome to the world of POKEMON!",
+  "party_pokemon": [
+    {
+      "nickname": "PIKACHU",
+      "species": "PIKACHU",
+      "level": 5,
+      "hp": {"current": 20, "max": 20},
+      "moves": [{"name": "TACKLE", "pp": {"current": 35, "max": 35}}]
+    }
+  ],
+  "screenshot_base64": "base64_encoded_image_data",
+  "collision_map": "text_representation_of_collision_map",
+  "step_number": 0,
+  "execution_time": 0.123
+}
+```
 
-To create an agent that interacts with the evaluator server:
+### Take Action
+
+```
+POST /action
+```
+
+Request body (for pressing a key):
+```json
+{
+  "action_type": "press_key",
+  "keys": ["a"]
+}
+```
+
+Request body (for waiting):
+```json
+{
+  "action_type": "wait",
+  "frames": 60
+}
+```
+
+Response: Same format as the initialize endpoint
+
+### Check Status
+
+```
+GET /status
+```
+
+Response:
+```json
+{
+  "status": "running",
+  "steps_taken": 42,
+  "average_action_time": 0.156
+}
+```
+
+### Stop Environment
+
+```
+POST /stop
+```
+
+Response:
+```json
+{
+  "status": "stopped",
+  "steps_taken": 42
+}
+```
+
+## Action Types
+
+The server supports two types of actions:
+
+### 1. Press Key
+
+Used to press one or more Game Boy buttons in sequence.
+
+```json
+{
+  "action_type": "press_key",
+  "keys": ["a"]
+}
+```
+
+Valid keys:
+- `"a"` - A button
+- `"b"` - B button
+- `"start"` - Start button
+- `"select"` - Select button
+- `"up"` - D-pad Up
+- `"down"` - D-pad Down
+- `"left"` - D-pad Left
+- `"right"` - D-pad Right
+
+You can send multiple keys in a sequence:
+```json
+{
+  "action_type": "press_key",
+  "keys": ["up", "up", "a"]
+}
+```
+
+### 2. Wait
+
+Used to wait for a specified number of frames.
+
+```json
+{
+  "action_type": "wait",
+  "frames": 60
+}
+```
+
+Where:
+- `frames` is the number of frames to wait (at 60 FPS, 60 frames = 1 second)
+
+## Game State Response
+
+Each action returns a game state response with the following information:
+
+- `player_name`: Player character name
+- `rival_name`: Rival character name
+- `money`: Current money
+- `location`: Current location name
+- `coordinates`: Player [x, y] coordinates
+- `badges`: List of obtained badges
+- `valid_moves`: List of valid movement directions
+- `inventory`: List of items and quantities
+- `dialog`: Any active dialog text
+- `party_pokemon`: List of Pokemon in the party with stats
+- `screenshot_base64`: Base64-encoded screenshot
+- `collision_map`: Text representation of collision map
+- `step_number`: Current step number
+- `execution_time`: Time taken to execute the action
+
+## Client Implementation Example
+
+Here's a simple Python example for interacting with the server:
 
 ```python
-from agent.client import PokemonServerClient
+import requests
 
-# Create client
-client = PokemonServerClient(server_url="http://localhost:8000")
+# Server URL
+SERVER_URL = "http://localhost:8000"
 
 # Initialize environment
-state = client.initialize(headless=True, sound=False)
+response = requests.post(
+    f"{SERVER_URL}/initialize",
+    json={"headless": True, "sound": False}
+)
+state = response.json()
 
-# Press buttons
-state = client.press_buttons(keys=["a"])
+# Press a button
+response = requests.post(
+    f"{SERVER_URL}/action",
+    json={"action_type": "press_key", "keys": ["a"]}
+)
+state = response.json()
 
 # Wait for frames
-state = client.wait(frames=30)
+response = requests.post(
+    f"{SERVER_URL}/action",
+    json={"action_type": "wait", "frames": 60}
+)
+state = response.json()
 
-# Stop the environment
-client.stop()
+# Stop environment
+requests.post(f"{SERVER_URL}/stop")
 ```
 
-## License
+## Notes
 
-[MIT License](LICENSE)
+- The server maintains session data and images in the `gameplay_sessions` directory
+- All screenshots are saved in the session's `images` folder
+- Gameplay data is logged to a CSV file in the session directory 
