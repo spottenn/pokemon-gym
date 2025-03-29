@@ -195,9 +195,8 @@ class AIServerAgent:
         """
         # Prepare state information for Claude
         screenshot_b64 = state['screenshot_base64']
-        memory_info = state['memory_info']
         
-        # Create message content
+        # Create message content with the game state information
         content = [
             {"type": "text", "text": "Here is the current state of the game:"},
             {
@@ -208,18 +207,38 @@ class AIServerAgent:
                     "data": screenshot_b64,
                 },
             },
-            {"type": "text", "text": f"\nGame state information from memory:\n{memory_info}"},
+            {"type": "text", "text": f"\nGame state information:"},
+            {"type": "text", "text": f"Location: {state['location']}"},
+            {"type": "text", "text": f"Coordinates: {state['coordinates']}"},
+            {"type": "text", "text": f"Valid moves: {state['valid_moves']}"},
+            {"type": "text", "text": f"Money: {state['money']}"},
+            {"type": "text", "text": f"Badges: {state['badges']}"},
         ]
+        
+        # Add dialog information if available
+        if state['dialog']:
+            content.append({"type": "text", "text": f"Dialog: {state['dialog']}"})
+        
+        # Add party pokemon information
+        if state['party_pokemon']:
+            pokemon_info = "\nParty Pokemon:\n"
+            for i, pokemon in enumerate(state['party_pokemon']):
+                pokemon_info += f"{i+1}. {pokemon['nickname']} ({pokemon['species']}) Lv.{pokemon['level']} " \
+                               f"HP: {pokemon['hp']['current']}/{pokemon['hp']['max']}\n"
+            content.append({"type": "text", "text": pokemon_info})
+        
+        # Add inventory information
+        if state['inventory']:
+            inventory_info = "\nInventory:\n"
+            for item in state['inventory']:
+                inventory_info += f"- {item['item']}: {item['quantity']}\n"
+            content.append({"type": "text", "text": inventory_info})
         
         # Add collision map and valid moves (if available)
         collision_map = state.get('collision_map')
-        valid_moves = state.get('valid_moves')
         
         if collision_map:
             content.append({"type": "text", "text": f"\nCollision map:\n{collision_map}"})
-        
-        if valid_moves:
-            content.append({"type": "text", "text": f"\nValid moves: {valid_moves}"})
         
         # Add message to history
         self.message_history.append({"role": "user", "content": content})
