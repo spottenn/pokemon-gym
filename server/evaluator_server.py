@@ -12,6 +12,7 @@ import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from PIL import Image
 
 from pokemon_env import PokemonEnvironment
 from pokemon_env.action import Action, PressKey, Wait, ActionType
@@ -26,6 +27,14 @@ env = None
 csv_writer = None
 csv_file = None
 last_response_time = None
+
+# Output directory structure
+OUTPUT_DIR = "gameplay_sessions"  # Base directory for all sessions
+current_session_dir = None  # Current session directory
+IMAGES_FOLDER = "images"  # Subfolder name for images within the session directory
+
+# Create base output directory if it doesn't exist
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # Create FastAPI app
 app = FastAPI(
@@ -70,15 +79,64 @@ class GameStateResponse(BaseModel):
     execution_time: float
 
 
-def initialize_csv_logger(filename=None):
-    """Initialize the CSV logger with the given filename or a timestamped one."""
+def setup_session_directory():
+    """Create a new directory for the current gameplay session."""
+    global current_session_dir
+    
+    # Generate timestamp for unique directory name
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    session_dir = os.path.join(OUTPUT_DIR, f"session_{timestamp}")
+    
+    # Create session directory
+    os.makedirs(session_dir, exist_ok=True)
+    
+    # Create images subdirectory
+    images_dir = os.path.join(session_dir, IMAGES_FOLDER)
+    os.makedirs(images_dir, exist_ok=True)
+    
+    current_session_dir = session_dir
+    logger.info(f"Created session directory: {session_dir}")
+    
+    return session_dir
+
+
+def save_screenshot(screenshot_base64: str, step_number: int, action_type: str) -> None:
+    """
+    Save a screenshot to the images folder
+    
+    Args:
+        screenshot_base64: Base64 encoded screenshot
+        step_number: Current step number
+        action_type: Type of action taken
+    """
+    try:
+        # Create filename with step number and action type
+        images_dir = os.path.join(current_session_dir, IMAGES_FOLDER)
+        filename = os.path.join(images_dir, f"{step_number}_{action_type}.png")
+        
+        # Decode base64 image
+        image_data = base64.b64decode(screenshot_base64)
+        image = Image.open(io.BytesIO(image_data))
+        
+        # Save the image
+        image.save(filename)
+        logger.info(f"Screenshot saved to {filename}")
+    except Exception as e:
+        logger.error(f"Error saving screenshot: {e}")
+
+
+def initialize_csv_logger(custom_filename=None):
+    """Initialize the CSV logger within the session directory."""
     global csv_writer, csv_file
     
-    if filename is None:
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"pokemon_gameplay_{timestamp}.csv"
-    
     try:
+        if custom_filename:
+            # If a custom filename is provided, use it but place in the session directory
+            filename = os.path.join(current_session_dir, os.path.basename(custom_filename))
+        else:
+            # Otherwise use a default name
+            filename = os.path.join(current_session_dir, "gameplay_data.csv")
+        
         csv_file = open(filename, 'w', newline='')
         fieldnames = ['timestamp', 'step_number', 'action_type', 'action_details', 
                      'location', 'coordinates', 'party_size', 'execution_time']
@@ -114,6 +172,16 @@ def log_response(response: GameStateResponse, action_type: str, action_details: 
         csv_writer.writerow(row)
         csv_file.flush()  # Ensure data is written immediately
         logger.info(f"Response data for step {response.step_number} logged to CSV")
+        
+        # Save screenshot with step number and action type
+        action_name = action_type
+        if action_type == "press_key" and isinstance(action_details, dict) and "keys" in action_details:
+            action_name = f"press_{'-'.join(action_details['keys'])}"
+        elif action_type == "wait" and isinstance(action_details, dict) and "frames" in action_details:
+            action_name = f"wait_{action_details['frames']}"
+        
+        save_screenshot(response.screenshot_base64, response.step_number, action_name)
+        
     except Exception as e:
         logger.error(f"Error logging to CSV: {e}")
 
@@ -131,6 +199,12 @@ async def initialize(request: InitializeRequest):
         The initial game state
     """
     global env, last_response_time
+    
+    # Set up a new session directory
+    setup_session_directory()
+    
+    # Initialize CSV logger in the new session directory
+    initialize_csv_logger()
     
     # Reset the last response time
     last_response_time = time.time()
@@ -176,6 +250,9 @@ async def initialize(request: InitializeRequest):
         
         # Log initial state
         log_response(response, "initialize", request)
+        
+        # Save initial screenshot explicitly
+        save_screenshot(response.screenshot_base64, 0, "initial")
         
         return response
     
@@ -237,7 +314,7 @@ async def take_action(request: ActionRequest):
                 )
             
             action = Wait(frames=request.frames)
-            action_details = {"wait": request.frames}
+            action_details = {"frames": request.frames}
         
         else:
             raise HTTPException(
@@ -286,16 +363,18 @@ async def get_status():
     """Get the current status of the environment."""
     if env is None:
         return {"status": "not_initialized"}
-    return {"status": "running", "steps_taken": env.steps_taken}
+    return {"status": "running", "steps_taken": env.steps_taken, "session_dir": current_session_dir}
 
 
 @app.post("/stop")
 async def stop_environment():
     """Stop the environment."""
-    global env, csv_file
+    global env, csv_file, csv_writer, current_session_dir
     
     if env is None:
         return {"status": "not_initialized"}
+    
+    session_path = current_session_dir
     
     try:
         env.stop()
@@ -303,10 +382,13 @@ async def stop_environment():
         
         # Close CSV file if open
         if csv_file:
+            logger.info("Closing CSV log file")
             csv_file.close()
             csv_file = None
+            csv_writer = None
             
-        return {"status": "stopped"}
+        logger.info(f"Session data saved to {session_path}")
+        return {"status": "stopped", "session_dir": session_path}
     
     except Exception as e:
         logger.error(f"Error stopping environment: {e}")
@@ -321,15 +403,12 @@ if __name__ == "__main__":
     parser.add_argument("--host", type=str, default="0.0.0.0", help="Host to run the server on")
     parser.add_argument("--port", type=int, default=8080, help="Port to run the server on")
     parser.add_argument("--rom", type=str, default="Pokemon_Red.gb", help="Path to the Pokemon ROM file")
-    parser.add_argument("--log-file", type=str, help="CSV file to log responses (default: timestamped file)")
+    parser.add_argument("--log-file", type=str, help="Custom CSV filename (optional)")
     
     args = parser.parse_args()
     
     # Set ROM path
     ROM_PATH = args.rom
-    
-    # Initialize CSV logger
-    initialize_csv_logger(args.log_file)
     
     # Run the server
     uvicorn.run(app, host=args.host, port=args.port) 

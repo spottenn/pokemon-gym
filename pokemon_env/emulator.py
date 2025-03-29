@@ -38,7 +38,7 @@ class Emulator:
         self.pyboy.set_emulation_speed(0)
         for _ in range(60):
             self.tick(60)
-        self.pyboy.set_emulation_speed(1)
+        self.pyboy.set_emulation_speed(5)
 
     def get_screenshot(self):
         """Get the current screenshot."""

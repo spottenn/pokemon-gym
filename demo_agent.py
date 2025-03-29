@@ -461,7 +461,7 @@ def main():
     """Main function"""
     parser = argparse.ArgumentParser(description="Pokemon AI Agent")
     parser.add_argument("--server", type=str, default="http://localhost:8080", help="Evaluation server URL")
-    parser.add_argument("--steps", type=int, default=50, help="Number of steps to run")
+    parser.add_argument("--steps", type=int, default=100, help="Number of steps to run")
     parser.add_argument("--headless", action="store_true", help="Run headless")
     parser.add_argument("--sound", action="store_true", help="Enable sound")
     parser.add_argument("--model", type=str, default="claude-3-5-sonnet-20240620", help="Claude model to use")
@@ -481,7 +481,6 @@ def main():
     
     try:
         # Initialize environment
-        logger.info("Initializing environment...")
         initial_state = agent.initialize(headless=args.headless, sound=args.sound)
         
         # Save initial screenshot

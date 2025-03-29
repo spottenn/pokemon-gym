@@ -65,6 +65,7 @@ class PokemonEnvironment:
         # Store the current state
         self._current_state = self._get_current_state()
         logger.info("current state initialized")
+        
     def step(self, action: Action) -> GameState:
         """
         Take a step in the environment using the provided action.
