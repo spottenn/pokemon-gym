@@ -4,6 +4,8 @@ import io
 import logging
 import os
 import time
+import csv
+import datetime
 from typing import Dict, List, Any, Optional
 
 import uvicorn
@@ -19,8 +21,10 @@ logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
 # Global variables
-ROM_PATH = "pokemon.gb"  # Default ROM path
+ROM_PATH = "Pokemon_Red.gb"  # Default ROM path
 env = None
+csv_writer = None
+csv_file = None
 
 # Create FastAPI app
 app = FastAPI(
@@ -66,6 +70,54 @@ class GameStateResponse(BaseModel):
     execution_time: float
 
 
+def initialize_csv_logger(filename=None):
+    """Initialize the CSV logger with the given filename or a timestamped one."""
+    global csv_writer, csv_file
+    
+    if filename is None:
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"pokemon_gameplay_{timestamp}.csv"
+    
+    try:
+        csv_file = open(filename, 'w', newline='')
+        fieldnames = ['timestamp', 'step_number', 'action_type', 'action_details', 
+                     'location', 'coordinates', 'party_size', 'execution_time']
+        csv_writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
+        csv_writer.writeheader()
+        logger.info(f"Response data will be logged to {filename}")
+    except Exception as e:
+        logger.error(f"Error initializing CSV logger: {e}")
+        csv_writer = None
+        if csv_file:
+            csv_file.close()
+            csv_file = None
+
+
+def log_response(response: GameStateResponse, action_type: str, action_details: Any):
+    """Log a response to the CSV file."""
+    global csv_writer
+    
+    if csv_writer is None:
+        return
+    
+    try:
+        row = {
+            'timestamp': datetime.datetime.now().isoformat(),
+            'step_number': response.step_number,
+            'action_type': action_type,
+            'action_details': str(action_details),
+            'location': response.location,
+            'coordinates': str(response.coordinates),
+            'party_size': len(response.party_pokemon),
+            'execution_time': response.execution_time
+        }
+        csv_writer.writerow(row)
+        csv_file.flush()  # Ensure data is written immediately
+        logger.info(f"Response data for step {response.step_number} logged to CSV")
+    except Exception as e:
+        logger.error(f"Error logging to CSV: {e}")
+
+
 # API Endpoints
 @app.post("/initialize", response_model=GameStateResponse)
 async def initialize(request: InitializeRequest):
@@ -83,7 +135,7 @@ async def initialize(request: InitializeRequest):
     # Check if ROM file exists
     if not os.path.exists(ROM_PATH):
         raise HTTPException(
-            status_code=404, 
+            status_code=500, 
             detail=f"ROM file not found: {ROM_PATH}"
         )
     
@@ -95,13 +147,16 @@ async def initialize(request: InitializeRequest):
             headless=request.headless,
             sound=request.sound
         )
+        logger.info("env initialized")
         
         # Get initial state
         state = env.state
-        
+        logger.info("state initialized")
         # Get collision map and valid moves
         collision_map = env.get_collision_map()
+        logger.info("collision_map initialized")
         valid_moves = env.get_valid_moves()
+        logger.info("valid_moves initialized")
         
         # Prepare response
         response = GameStateResponse(
@@ -115,6 +170,9 @@ async def initialize(request: InitializeRequest):
             step_number=0,
             execution_time=0.0
         )
+        
+        # Log initial state
+        log_response(response, "initialize", request)
         
         return response
     
@@ -155,6 +213,7 @@ async def take_action(request: ActionRequest):
                     detail="Keys parameter is required for press_key action."
                 )
             action = PressKey(keys=request.keys, wait=request.wait if request.wait is not None else True)
+            action_details = {"keys": request.keys, "wait": request.wait}
         
         elif request.action_type == "wait":
             if not request.frames:
@@ -163,6 +222,7 @@ async def take_action(request: ActionRequest):
                     detail="Frames parameter is required for wait action."
                 )
             action = Wait(frames=request.frames)
+            action_details = {"frames": request.frames}
         
         else:
             raise HTTPException(
@@ -192,6 +252,9 @@ async def take_action(request: ActionRequest):
             execution_time=execution_time
         )
         
+        # Log the action and response
+        log_response(response, request.action_type, action_details)
+        
         return response
     
     except Exception as e:
@@ -213,7 +276,7 @@ async def get_status():
 @app.post("/stop")
 async def stop_environment():
     """Stop the environment."""
-    global env
+    global env, csv_file
     
     if env is None:
         return {"status": "not_initialized"}
@@ -221,6 +284,12 @@ async def stop_environment():
     try:
         env.stop()
         env = None
+        
+        # Close CSV file if open
+        if csv_file:
+            csv_file.close()
+            csv_file = None
+            
         return {"status": "stopped"}
     
     except Exception as e:
@@ -234,10 +303,17 @@ async def stop_environment():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Pokemon Evaluator API Server")
     parser.add_argument("--host", type=str, default="0.0.0.0", help="Host to run the server on")
-    parser.add_argument("--port", type=int, default=8000, help="Port to run the server on")
-    parser.add_argument("--rom", type=str, default="pokemon.gb", help="Path to the Pokemon ROM file")
+    parser.add_argument("--port", type=int, default=8080, help="Port to run the server on")
+    parser.add_argument("--rom", type=str, default="Pokemon_Red.gb", help="Path to the Pokemon ROM file")
+    parser.add_argument("--log-file", type=str, help="CSV file to log responses (default: timestamped file)")
     
     args = parser.parse_args()
+    
+    # Set ROM path
+    ROM_PATH = args.rom
+    
+    # Initialize CSV logger
+    initialize_csv_logger(args.log_file)
     
     # Run the server
     uvicorn.run(app, host=args.host, port=args.port) 

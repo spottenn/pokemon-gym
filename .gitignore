@@ -48,3 +48,5 @@ ENV/
 
 # System
 .DS_Store
+
+Pokemon*
