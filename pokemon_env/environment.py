@@ -18,13 +18,17 @@ class GameState:
     """Represents the state of the game at a particular point in time."""
     
     # Basic state information
-    memory_info: Dict[str, Any]  # All memory-derived information
-    screenshot: Image.Image  # PIL Image of the current screen
-    
-    # Convenience properties - these are duplicates of data in memory_info
+    player_name: str
+    rival_name: str
+    money: int
     location: str
     coordinates: Tuple[int, int]
+    badges: List[str]
+    valid_moves: List[str]
+    inventory: List[Dict[str, Any]]
+    dialog: str
     party_pokemon: List[Dict[str, Any]]
+    screenshot: Image.Image  # PIL Image of the current screen
     
     @property
     def screenshot_base64(self, upscale: int = 2) -> str:
@@ -105,10 +109,7 @@ class PokemonEnvironment:
         self.game_history[self.steps_taken] = {
             'action': action.to_dict(),
             'state': {
-                'memory_info': self._current_state.memory_info,
-                'location': self._current_state.location,
-                'coordinates': self._current_state.coordinates,
-                'party_pokemon': self._current_state.party_pokemon
+                **self._current_state.__dict__
             },
             'execution_time': self.action_times[self.steps_taken]
         }
@@ -121,13 +122,20 @@ class PokemonEnvironment:
         screenshot = self.emulator.get_screenshot()
         
         return GameState(
-            memory_info=memory_info,
-            screenshot=screenshot,
-            location=memory_info.get('location', 'UNKNOWN'),
-            coordinates=memory_info.get('coordinates', (0, 0)),
-            party_pokemon=memory_info.get('party_pokemon', [])
+            player_name=memory_info.get('player', {}).get('name', 'UNKNOWN'),
+            rival_name=memory_info.get('player', {}).get('rival_name', 'UNKNOWN'),
+            money=memory_info.get('player', {}).get('money', 0),
+            location=memory_info.get('player', {}).get('location', 'UNKNOWN'),
+            coordinates=memory_info.get('player', {}).get('coordinates', (0, 0)),
+            badges=memory_info.get('player', {}).get('badges', []),
+            valid_moves=memory_info.get('valid_moves', []),
+            inventory=memory_info.get('inventory', []),
+            dialog=memory_info.get('dialog', 'UNKNOWN'),
+            party_pokemon=memory_info.get('party_pokemon', []),
+            screenshot=screenshot
         )
-    
+
+
     @property
     def state(self) -> GameState:
         """Get the current state of the game."""

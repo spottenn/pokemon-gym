@@ -68,13 +68,18 @@ class ActionRequest(BaseModel):
 
 
 class GameStateResponse(BaseModel):
-    memory_info: Dict[str, Any]
-    screenshot_base64: str
+    player_name: str
+    rival_name: str
+    money: int
     location: str
     coordinates: List[int]
+    badges: List[str]
+    valid_moves: List[str]
+    inventory: List[Dict[str, Any]]
+    dialog: None | str
     party_pokemon: List[Dict[str, Any]]
-    collision_map: Optional[str] = None
-    valid_moves: Optional[List[str]] = None
+    screenshot_base64: str
+    collision_map: None | str
     step_number: int
     execution_time: float
 
@@ -138,8 +143,8 @@ def initialize_csv_logger(custom_filename=None):
             filename = os.path.join(current_session_dir, "gameplay_data.csv")
         
         csv_file = open(filename, 'w', newline='')
-        fieldnames = ['timestamp', 'step_number', 'action_type', 'action_details', 
-                     'location', 'coordinates', 'party_size', 'execution_time']
+        fieldnames = ['timestamp', 'step_number', 'action_type', 'action_details', 'badges', 
+                      'inventory', 'location', 'money', 'coordinates', 'party_size', 'dialog', 'execution_time']
         csv_writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
         csv_writer.writeheader()
         logger.info(f"Response data will be logged to {filename}")
@@ -157,16 +162,19 @@ def log_response(response: GameStateResponse, action_type: str, action_details: 
     
     if csv_writer is None:
         return
-    
     try:
         row = {
             'timestamp': datetime.datetime.now().isoformat(),
             'step_number': response.step_number,
             'action_type': action_type,
             'action_details': str(action_details),
+            'badges': str(response.badges),
+            'inventory': str(response.inventory),
             'location': response.location,
+            'money': response.money,
             'coordinates': str(response.coordinates),
             'party_size': len(response.party_pokemon),
+            'dialog': response.dialog,
             'execution_time': response.execution_time
         }
         csv_writer.writerow(row)
@@ -229,21 +237,22 @@ async def initialize(request: InitializeRequest):
         # Get initial state
         state = env.state
         logger.info("state initialized")
-        # Get collision map and valid moves
         collision_map = env.get_collision_map()
-        logger.info("collision_map initialized")
-        valid_moves = env.get_valid_moves()
-        logger.info("valid_moves initialized")
         
         # Prepare response
         response = GameStateResponse(
-            memory_info=state.memory_info,
-            screenshot_base64=state.screenshot_base64,
+            player_name=state.player_name,
+            rival_name=state.rival_name,
+            money=state.money,
             location=state.location,
             coordinates=list(state.coordinates),  # Convert tuple to list
+            badges=state.badges,
+            valid_moves=state.valid_moves,
+            inventory=state.inventory,
+            dialog=state.dialog,
             party_pokemon=state.party_pokemon,
+            screenshot_base64=state.screenshot_base64,
             collision_map=collision_map,
-            valid_moves=valid_moves,
             step_number=0,
             execution_time=0.0
         )
@@ -331,13 +340,18 @@ async def take_action(request: ActionRequest):
         
         # Prepare response
         response = GameStateResponse(
-            memory_info=state.memory_info,
-            screenshot_base64=state.screenshot_base64,
+            player_name=state.player_name,
+            rival_name=state.rival_name,
+            money=state.money,
             location=state.location,
             coordinates=list(state.coordinates),  # Convert tuple to list
+            badges=state.badges,
+            valid_moves=state.valid_moves,
+            inventory=state.inventory,
+            dialog=state.dialog,
             party_pokemon=state.party_pokemon,
+            screenshot_base64=state.screenshot_base64,
             collision_map=collision_map,
-            valid_moves=valid_moves,
             step_number=env.steps_taken,
             execution_time=execution_time  # Use the calculated time
         )
