@@ -28,7 +28,7 @@ pip install -r requirements.txt
 Run the server with:
 
 ```bash
-python server.py --host 0.0.0.0 --port 8000 --rom pokemon.gb
+python -m server.evaluator_server
 ```
 
 Command-line arguments:

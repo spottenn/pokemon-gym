@@ -23,7 +23,7 @@ pip install pygame
 Start the Human Agent with:
 
 ```bash
-python human_agent.py --server http://localhost:8000
+python human_agent.py 
 ```
 
 Command-line arguments:
