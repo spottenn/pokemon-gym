@@ -25,6 +25,7 @@ ROM_PATH = "Pokemon_Red.gb"  # Default ROM path
 env = None
 csv_writer = None
 csv_file = None
+last_response_time = None
 
 # Create FastAPI app
 app = FastAPI(
@@ -53,7 +54,6 @@ class ActionRequest(BaseModel):
     action_type: str  # "press_key" or "wait"
     # For press_key
     keys: Optional[List[str]] = None
-    wait: Optional[bool] = True
     # For wait
     frames: Optional[int] = None
 
@@ -130,7 +130,10 @@ async def initialize(request: InitializeRequest):
     Returns:
         The initial game state
     """
-    global env
+    global env, last_response_time
+    
+    # Reset the last response time
+    last_response_time = time.time()
     
     # Check if ROM file exists
     if not os.path.exists(ROM_PATH):
@@ -195,7 +198,14 @@ async def take_action(request: ActionRequest):
     Returns:
         The new game state after taking the action
     """
-    global env
+    global env, last_response_time
+    
+    # Calculate execution time (time since last response)
+    current_time = time.time()
+    if last_response_time is None:
+        execution_time = 0.0  # First action has no previous time
+    else:
+        execution_time = current_time - last_response_time
     
     # Check if environment is initialized
     if env is None:
@@ -204,6 +214,9 @@ async def take_action(request: ActionRequest):
             detail="Environment not initialized. Call /initialize first."
         )
     
+    logger.info(f"Taking action: {request.action_type}")
+    logger.info(f"Keys: {request.keys}")
+    logger.info(f"Frames: {request.frames}")
     # Create action based on request
     try:
         if request.action_type == "press_key":
@@ -212,8 +225,9 @@ async def take_action(request: ActionRequest):
                     status_code=400,
                     detail="Keys parameter is required for press_key action."
                 )
-            action = PressKey(keys=request.keys, wait=request.wait if request.wait is not None else True)
-            action_details = {"keys": request.keys, "wait": request.wait}
+            logger.info(f"Creating PressKey action with keys: {request.keys}")
+            action = PressKey(keys=request.keys)
+            action_details = {"keys": request.keys}
         
         elif request.action_type == "wait":
             if not request.frames:
@@ -221,8 +235,9 @@ async def take_action(request: ActionRequest):
                     status_code=400,
                     detail="Frames parameter is required for wait action."
                 )
+            
             action = Wait(frames=request.frames)
-            action_details = {"frames": request.frames}
+            action_details = {"wait": request.frames}
         
         else:
             raise HTTPException(
@@ -230,10 +245,8 @@ async def take_action(request: ActionRequest):
                 detail=f"Unknown action type: {request.action_type}"
             )
         
-        # Execute action and measure time
-        start_time = time.time()
+        # Execute action
         state = env.step(action)
-        execution_time = time.time() - start_time
         
         # Get collision map and valid moves
         collision_map = env.get_collision_map()
@@ -249,11 +262,14 @@ async def take_action(request: ActionRequest):
             collision_map=collision_map,
             valid_moves=valid_moves,
             step_number=env.steps_taken,
-            execution_time=execution_time
+            execution_time=execution_time  # Use the calculated time
         )
         
         # Log the action and response
         log_response(response, request.action_type, action_details)
+        
+        # Update the last response time
+        last_response_time = time.time()
         
         return response
     

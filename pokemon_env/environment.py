@@ -79,9 +79,10 @@ class PokemonEnvironment:
         start_time = time.time()
         
         # Process the action based on its type
+        logger.info(f"Processing action: {action}")
         if action.action_type == ActionType.PRESS_KEY:
             assert isinstance(action, PressKey)
-            self.emulator.press_buttons(action.keys, action.wait)
+            self.emulator.press_buttons(action.keys)
         elif action.action_type == ActionType.WAIT:
             assert isinstance(action, Wait)
             self.emulator.tick(action.frames)
@@ -89,6 +90,7 @@ class PokemonEnvironment:
             raise ValueError(f"Unknown action type: {action.action_type}")
         
         # Update the current state
+        logger.info("updating current state")
         self._current_state = self._get_current_state()
         
         # Increment step counter

@@ -28,13 +28,12 @@ class PressKey(Action):
     
     VALID_KEYS = ["a", "b", "start", "select", "up", "down", "left", "right"]
     
-    def __init__(self, keys: List[str], wait: bool = True):
+    def __init__(self, keys: List[str]):
         """
         Initialize a press key action.
         
         Args:
             keys: List of keys to press in sequence
-            wait: Whether to wait after each button press (default: True)
         """
         # Validate keys
         for key in keys:
@@ -42,7 +41,6 @@ class PressKey(Action):
                 raise ValueError(f"Invalid key: {key}. Valid keys are: {self.VALID_KEYS}")
         
         self.keys = keys
-        self.wait = wait
     
     @property
     def action_type(self) -> ActionType:
@@ -51,13 +49,11 @@ class PressKey(Action):
     def to_dict(self) -> dict:
         return {
             "action_type": self.action_type.value,
-            "keys": self.keys,
-            "wait": self.wait
+            "keys": self.keys
         }
     
     def __str__(self) -> str:
-        wait_str = " (with wait)" if self.wait else " (no wait)"
-        return f"PressKey: {', '.join(self.keys)}{wait_str}"
+        return f"PressKey: {', '.join(self.keys)}"
 
 
 class Wait(Action):
