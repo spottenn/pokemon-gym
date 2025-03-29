@@ -28,13 +28,13 @@ pip install -r requirements.txt
 Run the server with:
 
 ```bash
-python -m server.evaluator_server
+python -m server.evaluator_server --rom path_to_your_rom
 ```
 
 Command-line arguments:
 - `--host`: Host address to bind the server to (default: 0.0.0.0)
 - `--port`: Port to listen on (default: 8000)
-- `--rom`: Path to the Pokemon ROM file (default: "pokemon.gb")
+- `--rom`: Path to the Pokemon ROM file (default: "Pokemon_Red.gb")
 - `--reload`: Enable auto-reload for development
 
 ## Server API
