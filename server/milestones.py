@@ -3,188 +3,127 @@ import math # Import math module for potential use of infinity etc.
 # --- Pokémon Acquisition Difficulty Ratings (0.5 - 10.5) ---
 # Higher score means rarer, harder to obtain, or acquired later in the game
 pokemon_difficulty_ratings_refined = {
-    # --- Difficulty Level 0.5: Extremely common, encountered at the start ---
-    'PIDGEY': 0.5,      # Pidgey: Found in almost all early grassy areas
-    'RATTATA': 0.5,     # Rattata: Same as above
+    # --- Difficulty 0.5: Virtually no extra effort (free or ubiquitous encounters)
+    'PIDGEY': 0.5,      # Extremely common in grassy areas
+    'RATTATA': 0.5,     # Ubiquitous early on
+    'WEEDLE': 0.5,      # Common in Viridian Forest
+    'CATERPIE': 0.5,    # Abundant in early forests
+    'KAKUNA': 0.5,      # Easily obtained via evolving Weedle or wild encounter
+    'METAPOD': 0.5,     # Similarly common as Caterpie
+    'ZUBAT': 0.5,       # Found in nearly every cave
+    'BULBASAUR': 0.5,   # Starter Pokémon (free choice at game start)
+    'CHARMANDER': 0.5,  # Starter Pokémon (free choice at game start)
+    'SQUIRTLE': 0.5,    # Starter Pokémon (free choice at game start)
 
-    # --- Difficulty Level 1.0: Very common, early caves/forests ---
-    'SPEAROW': 1.0,     # Spearow: Common on early routes
-    'ZUBAT': 1.0,       # Zubat: Standard cave encounter
-    'WEEDLE': 1.0,      # Weedle: Common in early forests (Blue/Yellow)
-    'CATERPIE': 1.0,    # Caterpie: Common in early forests (Red/Yellow)
-    'KAKUNA': 1.0,      # Kakuna: Evolves from Weedle / Wild
-    'METAPOD': 1.0,     # Metapod: Evolves from Caterpie / Wild
+    # --- Difficulty 1.0: Very common wild encounters
+    'SPEAROW': 1.0,     # Frequently encountered on early routes
+    'GEODUDE': 1.0,     # Abundant in early caves
+    'NIDORAN_M': 1.0,   # Common on early routes (in one version)
+    'NIDORAN_F': 1.0,   # Common on early routes (in one version)
+    'MAGIKARP': 1.0,    # Common fishing encounter in nearly all waters
 
-    # --- Difficulty Level 1.5: Common in specific early areas, or simple version exclusives ---
-    'NIDORAN_M': 1.5,   # Nidoran♂: Early routes / Safari
-    'NIDORAN_F': 1.5,   # Nidoran♀: Early routes / Safari
-    'GEODUDE': 1.5,     # Geodude: Common in early caves
-    'PARAS': 1.5,       # Paras: Mt. Moon / Safari
-    'MAGIKARP': 1.5,    # Magikarp: Easily fished in almost all waters (but requires patience to train)
+    # --- Difficulty 1.5: Common but with version restrictions or minor evolution steps
+    'EKANS': 1.5,       # Red version exclusive; easy if playing Red
+    'SANDSHREW': 1.5,   # Blue version exclusive; easy in that version
+    'MANKEY': 1.5,      # Only in Red/Yellow; common in those games
+    'MEOWTH': 1.5,      # Blue version exclusive; encountered regularly there
+    'ODDISH': 1.5,      # Red exclusive; encountered in limited areas
+    'BELLSPROUT': 1.5,  # Blue exclusive; encountered in specific areas
+    'POLIWAG': 1.5,     # Common fishing encounter; slightly less ubiquitous
+    'GOLDEEN': 1.5,     # Common in water; similar to Poliwag
+    'BEEDRILL': 1.5,    # Typically obtained by evolving Weedle (no extra effort)
+    'BUTTERFREE': 1.5,  # Obtained by evolving Caterpie; very easy to acquire
 
-    # --- Difficulty Level 2.0: Slightly later routes / version exclusives / simple evolutions / fishing ---
-    'EKANS': 2.0,       # Ekans: Red version exclusive
-    'SANDSHREW': 2.0,   # Sandshrew: Blue version exclusive
-    'MANKEY': 2.0,      # Mankey: Red/Yellow version exclusive
-    'MEOWTH': 2.0,      # Meowth: Blue version exclusive
-    'ODDISH': 2.0,      # Oddish: Red version exclusive
-    'BELLSPROUT': 2.0,  # Bellsprout: Blue version exclusive
-    'POLIWAG': 2.0,     # Poliwag: Common fishing encounter
-    'GOLDEEN': 2.0,     # Goldeen: Common fishing encounter
-    'BEEDRILL': 2.0,    # Beedrill: Evolves from Kakuna
-    'BUTTERFREE': 2.0,  # Butterfree: Evolves from Metapod
+    # --- Difficulty 2.0: Evolved forms that are less common in the wild
+    'PIDGEOTTO': 2.0,   # Evolved form of Pidgey; less common wild encounter
+    'RATICATE': 2.0,    # Evolved form of Rattata; encountered less often
+    'GOLBAT': 2.0,      # Wild evolution of Zubat; moderately common
+    'GLOOM': 2.0,       # Evolves from Oddish; less abundant than base form
+    'WEEPINBELL': 2.0,  # Evolves from Bellsprout; found with lower frequency
+    'POLIWHIRL': 2.0,   # Evolves from Poliwag; not as common as Poliwag
 
-    # --- Difficulty Level 2.5: Evolved forms of common Pokémon ---
-    'PIDGEOTTO': 2.5,   # Pidgeotto: Evolves from Pidgey / Wild
-    'RATICATE': 2.5,    # Raticate: Evolves from Rattata / Wild
-    'GOLBAT': 2.5,      # Golbat: Evolves from Zubat / Wild (still very common)
-    'GLOOM': 2.5,       # Gloom: Evolves from Oddish / Wild (Red)
-    'WEEPINBELL': 2.5,  # Weepinbell: Evolves from Bellsprout / Wild (Blue)
-    'POLIWHIRL': 2.5,   # Poliwhirl: Evolves from Poliwag / Wild
+    # --- Difficulty 2.5: Location-specific encounters or those requiring travel
+    'DIGLETT': 2.5,     # Only found in Diglett’s Cave; extra area access required
+    'DROWZEE': 2.5,     # Only on select routes; moderate encounter rate
+    'GASTLY': 2.5,      # Found in Pokémon Tower; extra exploration needed
+    'TENTACOOL': 2.5,   # Encountered while surfing; requires water travel
+    'MACHOP': 2.5,      # Found in Rock Tunnel/Victory Road; extra progression required
+    'GYARADOS': 2.5,    # Though evolved from Magikarp, wild encounters are rare
 
-    # --- Difficulty Level 3.0: Common in specific locations (Tower/Cave) / Surfing / Requires training evolution ---
-    'DIGLETT': 3.0,     # Diglett: Common in Diglett's Cave
-    'DROWZEE': 3.0,     # Drowzee: Common on specific routes
-    'GASTLY': 3.0,      # Gastly: Common in Pokémon Tower
-    'TENTACOOL': 3.0,   # Tentacool: Extremely common when Surfing
-    'MACHOP': 3.0,      # Machop: Common in Rock Tunnel / Victory Road
-    'GYARADOS': 3.0,    # Gyarados: Evolves from Magikarp (Level 20, not too high)
+    # --- Difficulty 3.0: Moderately rare or needing specific conditions/tools
+    'FEAROW': 3.0,      # Evolved from Spearow; seen less frequently
+    'ARBOK': 3.0,       # Evolves from Ekans; extra evolution step increases difficulty
+    'SANDSLASH': 3.0,   # Evolves from Sandshrew; similar reasoning as Arbok
+    'NIDORINO': 3.0,    # Evolves from Nidoran♂; not encountered as commonly as the base form
+    'NIDORINA': 3.0,    # Evolves from Nidoran♀; similarly rarer
+    'CLEFAIRY': 3.0,    # Requires use of the Silph Scope in Mt. Moon; extra step needed
+    'JIGGLYPUFF': 3.0,  # Encountered on select routes; not very frequent
+    'PERSIAN': 3.0,     # Evolves from Meowth; rarity due to version exclusivity
+    'PRIMEAPE': 3.0,    # Evolves from Mankey; less common in the wild
 
-    # --- Difficulty Level 3.5: Mid-game evolution / Requires Moon Stone / Slightly rarer ---
-    'FEAROW': 3.5,      # Fearow: Evolves from Spearow / Wild
-    'ARBOK': 3.5,       # Arbok: Evolves from Ekans (Red)
-    'SANDSLASH': 3.5,   # Sandslash: Evolves from Sandshrew (Blue)
-    'NIDORINO': 3.5,    # Nidorino: Evolves from Nidoran♂ / Wild
-    'NIDORINA': 3.5,    # Nidorina: Evolves from Nidoran♀ / Wild
-    'CLEFAIRY': 3.5,    # Clefairy: Mt. Moon (needs searching)
-    'JIGGLYPUFF': 3.5,  # Jigglypuff: Specific route (needs searching)
-    'PERSIAN': 3.5,     # Persian: Evolves from Meowth (Blue)
-    'PRIMEAPE': 3.5,    # Primeape: Evolves from Mankey (Red/Yellow)
+    # --- Difficulty 3.5: Involves extra items (evolution stones) or limited wild availability
+    'ONIX': 3.5,        # Found in Rock Tunnel; relatively scarce wild encounter
+    'SLOWPOKE': 3.5,    # Only in specific water-adjacent areas; limited spots
+    'PSYDUCK': 3.5,     # Encountered in limited water areas
+    'GROWLITHE': 3.5,   # Red exclusive; available only on certain routes
+    'VULPIX': 3.5,      # Blue exclusive; similarly restricted in availability
+    'KRABBY': 3.5,      # Requires fishing in certain areas; moderate rarity
+    'MAGNEMITE': 3.5,   # Found near the Power Plant; not common outside that area
+    'VOLTORB': 3.5,     # Similar to Magnemite; limited to specific zones
+    'GRIMER': 3.5,      # Found in Pokémon Mansion/Power Plant; less frequently seen
+    'KOFFING': 3.5,     # Limited encounters in specific routes or mansions
+    'PARASECT': 3.5,    # Evolves from Paras; extra evolution step adds difficulty
+    'NIDOKING': 3.5,    # Requires Moon Stone evolution of Nidorino; not catchable in the wild
+    'NIDOQUEEN': 3.5,   # Same as Nidoking; extra item needed
+    'CLEFABLE': 3.5,    # Evolves from Clefairy with a Moon Stone; extra resource needed
+    'WIGGLYTUFF': 3.5,  # Evolves from Jigglypuff using a Moon Stone; similarly extra
+    'SEAKING': 3.5,     # Evolves from Goldeen; extra evolution requirement
 
-    # --- Difficulty Level 4.0: Common in mid-game locations / Regular evolution stones / Level evolution ---
-    'ONIX': 4.0,        # Onix: Rock Tunnel / Later caves
-    'SLOWPOKE': 4.0,    # Slowpoke: Common near water
-    'PSYDUCK': 4.0,     # Psyduck: Common near water
-    'GROWLITHE': 4.0,   # Growlithe: Red version exclusive
-    'VULPIX': 4.0,      # Vulpix: Blue version exclusive
-    'KRABBY': 4.0,      # Krabby: Fishing / Waterside
-    'MAGNEMITE': 4.0,   # Magnemite: Specific route / Power Plant
-    'VOLTORB': 4.0,     # Voltorb: Specific route / Power Plant / Item disguise
-    'GRIMER': 4.0,      # Grimer: Pokémon Mansion / Power Plant
-    'KOFFING': 4.0,     # Koffing: Pokémon Mansion / Specific route
-    'PARASECT': 4.0,    # Parasect: Evolves from Paras
-    'NIDOKING': 4.0,    # Nidoking: Requires Moon Stone
-    'NIDOQUEEN': 4.0,   # Nidoqueen: Requires Moon Stone
-    'CLEFABLE': 4.0,    # Clefable: Requires Moon Stone
-    'WIGGLYTUFF': 4.0,  # Wigglytuff: Requires Moon Stone
-    'SEAKING': 4.0,     # Seaking: Evolves from Goldeen / Wild
+    # --- Difficulty 4.0: Even scarcer wild encounters or higher-level evolutions
+    'GRAVELER': 4.0,    # Evolves from Geodude; wild encounters of this form are rare
+    'MACHOKE': 4.0,     # Evolves from Machop; not typically found in the wild directly
+    'HAUNTER': 4.0,     # Evolves from Gastly; rarer and often requires trade evolution for Gengar
+    'HYPNO': 4.0,       # Evolves from Drowzee; lower encounter rates
+    'PONYTA': 4.0,      # Found on select routes/Safari Zone; relatively limited
+    'DODUO': 4.0,       # Encountered in the Safari Zone or select routes; not common
+    'SEEL': 4.0,        # Found in the Seafoam Islands; extra area access required
+    'PIDGEOT': 4.0,     # Final evolution of Pidgey; rarely seen wild
+    'PIKACHU': 4.0,     # Very rare wild encounter in Viridian Forest/Power Plant
 
-    # --- Difficulty Level 4.5: Mid-game evolved forms / Slightly later common encounters / Rarer wild ---
-    'GRAVELER': 4.5,    # Graveler: Evolves from Geodude / Wild
-    'MACHOKE': 4.5,     # Machoke: Evolves from Machop / Wild
-    'HAUNTER': 4.5,     # Haunter: Evolves from Gastly / Wild
-    'HYPNO': 4.5,       # Hypno: Evolves from Drowzee / Wild
-    'PONYTA': 4.5,      # Ponyta: Specific route
-    'DODUO': 4.5,       # Doduo: Specific route / Safari
-    'SEEL': 4.5,        # Seel: Seafoam Islands / Specific route
-    'PIDGEOT': 4.5,     # Pidgeot: Evolves from Pidgeotto
-    'PIKACHU': 4.5,     # Pikachu: Viridian Forest / Power Plant (Rarer in Red/Blue)
+    # --- Difficulty 4.5: Special environments or fossil-based acquisition
+    'EXEGGCUTE': 4.5,   # Found in the Safari Zone; limited by Safari mechanics
+    'CUBONE': 4.5,      # Only obtainable via fossil revival; one-time opportunity
+    'RHYHORN': 4.5,     # Found in Safari Zone/later caves; less common
+    'STARYU': 4.5,      # Specific fishing encounter; moderately rare
+    'SHELLDER': 4.5,    # Same as Staryu; limited to particular spots
+    'HORSEA': 4.5,      # Similar to Shellder; specific fishing areas only
+    'VENONAT': 4.5,     # Found in the Safari Zone; limited encounter rates
 
-    # --- Difficulty Level 5.0: Common in Safari / Needs special item (Scope) / Specific waters ---
-    'EXEGGCUTE': 5.0,   # Exeggcute: Safari Zone
-    'CUBONE': 5.0,      # Cubone: Pokémon Tower (Needs Silph Scope)
-    'RHYHORN': 5.0,     # Rhyhorn: Safari / Later caves
-    'STARYU': 5.0,      # Staryu: Fishing / Surfing (Specific locations)
-    'SHELLDER': 5.0,    # Shellder: Fishing (Specific locations)
-    'HORSEA': 5.0,      # Horsea: Fishing (Specific locations)
-    'VENONAT': 5.0,     # Venonat: Specific route / Safari
+    # --- Difficulty 5.0: Requires an evolution stone (extra resource cost)
+    'RAICHU': 5.0,      # Must evolve Pikachu using a Thunder Stone; extra item needed
+    'NINETALES': 5.0,   # Requires a Fire Stone on Vulpix; added acquisition step
+    'ARCANINE': 5.0,    # Fire Stone evolution from Growlithe; version-restricted and extra cost
+    'VILEPLUME': 5.0,   # Evolved from Gloom with a Leaf Stone; extra resource required
+    'VICTREEBEL': 5.0,  # Evolved from Weepinbell using a Leaf Stone; extra step
+    'CLOYSTER': 5.0,    # Evolves from Shellder with a Water Stone; limited by stone availability
+    'STARMIE': 5.0,     # Evolved from Staryu via Water Stone; similar difficulty as Cloyster
+    'EXEGGUTOR': 5.0,   # Requires a Leaf Stone to evolve Exeggcute; extra item needed
+    'MAROWAK': 5.0,     # Evolved from Cubone; fossil revival already limits its availability
 
-    # --- Difficulty Level 5.5: Requires non-Moon Stone evolution / Evolution of 5.0 Pokémon ---
-    'RAICHU': 5.5,      # Raichu: Requires Thunder Stone
-    'NINETALES': 5.5,   # Ninetales: Requires Fire Stone (Blue)
-    'ARCANINE': 5.5,    # Arcanine: Requires Fire Stone (Red)
-    'VILEPLUME': 5.5,   # Vileplume: Requires Leaf Stone (Red)
-    'VICTREEBEL': 5.5,  # Victreebel: Requires Leaf Stone (Blue)
-    'CLOYSTER': 5.5,    # Cloyster: Requires Water Stone
-    'STARMIE': 5.5,     # Starmie: Requires Water Stone
-    'EXEGGUTOR': 5.5,   # Exeggutor: Requires Leaf Stone
-    'MAROWAK': 5.5,     # Marowak: Evolves from Cubone / Wild
+    # --- Difficulty 5.5: Requires trade evolution (extra dependency on trading)
+    'GENGAR': 5.5,      # Must be traded from Haunter; trading is a significant hurdle
+    'ALAKAZAM': 5.5,    # Trade evolution from Kadabra; extra trade requirement
+    'MACHAMP': 5.5,     # Trade evolution from Machoke; relies on trading
+    'GOLEM': 5.5,       # Trade evolution from Graveler; extra step needed
+    'DRAGONAIR': 5.5,   # High-level evolution of Dratini; requires extensive leveling
+    'KABUTOPS': 5.5,    # Fossil evolution from Kabuto; limited fossil opportunity
+    'OMASTAR': 5.5,     # Fossil evolution from Omanyte; similar fossil limitation
+    'RHYDON': 5.5,      # Evolves from Rhyhorn; rarely encountered wild
 
-    # --- Difficulty Level 6.0: Unique in-game trade (not late) / Specific single location (version exclusive) / Slightly rare ---
-    'FARFETCHD': 6.0,   # Farfetch'd: In-game trade (Vermilion City)
-    'MR_MIME': 6.0,     # Mr. Mime: In-game trade (Route 2)
-    'JYNX': 6.0,        # Jynx: In-game trade (Cerulean City)
-    'LICKITUNG': 6.0,   # Lickitung: In-game trade (Route 18) / Wild (Yellow late-game)
-    'MAGMAR': 6.0,      # Magmar: Blue version exclusive (Pokémon Mansion)
-    'ELECTABUZZ': 6.0,  # Electabuzz: Red version exclusive (Power Plant)
-    'DITTO': 6.0,       # Ditto: Specific routes / Cave (not abundant)
-    'KINGLER': 6.0,     # Kingler: Evolves from Krabby / Wild
-    'SEADRA': 6.0,      # Seadra: Evolves from Horsea / Wild (Rare)
-
-    # --- Difficulty Level 6.5: Mid-late game level evolution / Requires Water Stone / Specific evolved wild ---
-    'SLOWBRO': 6.5,     # Slowbro: Evolves from Slowpoke (Level)
-    'MAGNETON': 6.5,    # Magneton: Evolves from Magnemite / Wild
-    'ELECTRODE': 6.5,   # Electrode: Evolves from Voltorb / Wild
-    'WEEZING': 6.5,     # Weezing: Evolves from Koffing / Wild
-    'MUK': 6.5,         # Muk: Evolves from Grimer / Wild
-    'DEWGONG': 6.5,     # Dewgong: Evolves from Seel / Wild
-    'GOLDUCK': 6.5,     # Golduck: Evolves from Psyduck / Wild
-    'POLIWRATH': 6.5,   # Poliwrath: Requires Water Stone
-    'DUGTRIO': 6.5,     # Dugtrio: Evolves from Diglett / Wild
-    'VENOMOTH': 6.5,    # Venomoth: Evolves from Venonat / Wild
-    'DODRIO': 6.5,      # Dodrio: Evolves from Doduo / Wild
-    'RAPIDASH': 6.5,    # Rapidash: Evolves from Ponyta / Wild
-    'TENTACRUEL': 6.5,  # Tentacruel: Evolves from Tentacool / Wild (Rare)
-
-    # --- Difficulty Level 7.0: Starter choice / Safari rare / Fossil choice / Unique gift ---
-    'BULBASAUR': 7.0,   # Bulbasaur: Starter / Gift in Cerulean (Yellow)
-    'CHARMANDER': 7.0,  # Charmander: Starter / Gift on Route 24 (Yellow)
-    'SQUIRTLE': 7.0,    # Squirtle: Starter / Gift in Vermilion (Yellow)
-    'IVYSAUR': 7.0,     # Ivysaur: Starter evolution
-    'CHARMELEON': 7.0,  # Charmeleon: Starter evolution
-    'WARTORTLE': 7.0,   # Wartortle: Starter evolution
-    'KANGASKHAN': 7.0,  # Kangaskhan: Safari Zone (Rare)
-    'SCYTHER': 7.0,     # Scyther: Safari (Red rare) / Game Corner (Red)
-    'PINSIR': 7.0,      # Pinsir: Safari (Blue rare) / Game Corner (Blue)
-    'TANGELA': 7.0,     # Tangela: Specific grass patch / Trade
-    'LAPRAS': 7.0,      # Lapras: Gift from Silph Co. (unique)
-    'KABUTO': 7.0,      # Kabuto: Fossil choice (Dome Fossil)
-    'OMANYTE': 7.0,     # Omanyte: Fossil choice (Helix Fossil)
-    'EEVEE': 7.0,       # Eevee: Obtained at Celadon Mansion back door (unique)
-
-    # --- Difficulty Level 7.5: Starter final evolution / Fighting Dojo choice / Eevee evolution ---
-    'VENUSAUR': 7.5,    # Venusaur: Starter final evolution
-    'CHARIZARD': 7.5,   # Charizard: Starter final evolution
-    'BLASTOISE': 7.5,   # Blastoise: Starter final evolution
-    'HITMONLEE': 7.5,   # Hitmonlee: Fighting Dojo choice (unique)
-    'HITMONCHAN': 7.5,  # Hitmonchan: Fighting Dojo choice (unique)
-    'FLAREON': 7.5,     # Flareon: Evolves from Eevee + Fire Stone
-    'JOLTEON': 7.5,     # Jolteon: Evolves from Eevee + Thunder Stone
-    'VAPOREON': 7.5,    # Vaporeon: Evolves from Eevee + Water Stone
-
-    # --- Difficulty Level 8.0: Extremely rare (Safari/Cave) / Expensive prize / Hard to catch (flees) ---
-    'CHANSEY': 8.0,     # Chansey: Safari Zone / Cerulean Cave (extremely rare)
-    'TAUROS': 8.0,      # Tauros: Safari Zone (Rare)
-    'DRATINI': 8.0,     # Dratini: Safari Zone fishing (Rare) / Game Corner (Expensive)
-    'PORYGON': 8.0,     # Porygon: Game Corner prize (Very expensive)
-    'ABRA': 8.0,        # Abra: Wild (flees), or Game Corner prize (Less expensive)
-    'KADABRA': 8.0,     # Kadabra: Evolves from Abra / Wild (Abra itself is hard to get)
-
-    # --- Difficulty Level 8.5: Requires trade evolution / Rare high-level evolution / Fossil evolution ---
-    'GENGAR': 8.5,      # Gengar: Requires trade evolution (Haunter -> Gengar)
-    'ALAKAZAM': 8.5,    # Alakazam: Requires trade evolution (Kadabra -> Alakazam)
-    'MACHAMP': 8.5,     # Machamp: Requires trade evolution (Machoke -> Machamp)
-    'GOLEM': 8.5,       # Golem: Requires trade evolution (Graveler -> Golem)
-    'DRAGONAIR': 8.5,   # Dragonair: Evolves from Dratini or Safari fishing (Even rarer)
-    'KABUTOPS': 8.5,    # Kabutops: Evolves from Kabuto
-    'OMASTAR': 8.5,     # Omastar: Evolves from Omanyte
-    'RHYDON': 8.5,      # Rhydon: Evolves from Rhyhorn
-
-    # --- Difficulty Level 9.0: Static encounter (few) / Final high-level evolution / Old Amber / Glitch ---
-    'SNORLAX': 9.0,     # Snorlax: Static encounter (only two)
-    'DRAGONITE': 9.0,   # Dragonite: Evolves from Dragonair (Lv 55)
-    'AERODACTYL': 9.0,  # Aerodactyl: Fossil revival (Old Amber)
-    # MissingNo. and Glitch Pokémon rated uniformly (obtained through non-standard means)
+    # --- Difficulty 9.0: Late-game, static or non-standard methods
+    'SNORLAX': 9.0,     # Static encounter with only two in the game
+    'DRAGONITE': 9.0,   # Final evolution of Dragonair; requires extensive leveling
+    'AERODACTYL': 9.0,  # Only available via fossil revival; one-time catch
     'MISSINGNO_1F': 9.0, 'MISSINGNO_20': 9.0, 'MISSINGNO_32': 9.0, 'MISSINGNO_34': 9.0,
     'MISSINGNO_38': 9.0, 'MISSINGNO_3D': 9.0, 'MISSINGNO_3E': 9.0, 'MISSINGNO_3F': 9.0,
     'MISSINGNO_43': 9.0, 'MISSINGNO_44': 9.0, 'MISSINGNO_45': 9.0, 'MISSINGNO_4F': 9.0,
@@ -195,19 +134,20 @@ pokemon_difficulty_ratings_refined = {
     'MISSINGNO_9F': 9.0, 'MISSINGNO_A0': 9.0, 'MISSINGNO_A1': 9.0, 'MISSINGNO_A2': 9.0,
     'MISSINGNO_AC': 9.0, 'MISSINGNO_AE': 9.0, 'MISSINGNO_AF': 9.0, 'MISSINGNO_B5': 9.0,
     'FOSSIL_KABUTOPS': 9.0, 'FOSSIL_AERODACTYL': 9.0,
-    'MON_GHOST': 9.0, # Ghost form cannot be caught normally
+    'MON_GHOST': 9.0,   # Ghost form cannot be caught normally
 
-    # --- Difficulty Level 9.5: Legendary Birds ---
-    'ARTICUNO': 9.5,    # Articuno: Deep in Seafoam Islands (requires puzzle + Strength + Surf)
-    'ZAPDOS': 9.5,      # Zapdos: Deep in Power Plant (requires Surf)
-    'MOLTRES': 9.5,     # Moltres: Victory Road (late-game maze) / Mt. Ember (Yellow)
+    # --- Difficulty 9.5: Legendary Birds (requires puzzle-solving and special access)
+    'ARTICUNO': 9.5,    # Deep in Seafoam Islands; requires puzzles and Surf
+    'ZAPDOS': 9.5,      # Found in the Power Plant; extra conditions apply
+    'MOLTRES': 9.5,     # Located in a late-game maze (Victory Road); very limited
 
-    # --- Difficulty Level 10.0: Final Legendary Pokémon ---
-    'MEWTWO': 10.0,     # Mewtwo: Deepest part of Cerulean Cave after beating the game (unique)
+    # --- Difficulty 10.0: Ultimate challenge of a static late-game encounter
+    'MEWTWO': 10.0,     # Only available after beating the game; very high effort required
 
-    # --- Difficulty Level 10.5: Mythical Pokémon ---
-    'MEW': 10.5,        # Mew: Normally requires event distribution, or obtained via Glitch
+    # --- Difficulty 10.5: Mythical Pokémon (not obtainable by normal means)
+    'MEW': 10.5,        # Only available via special events or glitches; highest acquisition difficulty
 }
+
 
 
 # --- Badge Acquisition Difficulty Ratings (7.0 - 20.0) ---

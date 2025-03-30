@@ -27,7 +27,7 @@ class GameState:
     valid_moves: List[str]
     inventory: List[Dict[str, Any]]
     dialog: str
-    party_pokemon: List[Dict[str, Any]]
+    pokemons: List[Dict[str, Any]]
     screenshot: Image.Image  # PIL Image of the current screen
     
     @property
@@ -131,7 +131,7 @@ class PokemonEnvironment:
             valid_moves=memory_info.get('valid_moves', []),
             inventory=memory_info.get('inventory', []),
             dialog=memory_info.get('dialog', 'UNKNOWN'),
-            party_pokemon=memory_info.get('party_pokemon', []),
+            pokemons=memory_info.get('pokemons', []),
             screenshot=screenshot
         )
 

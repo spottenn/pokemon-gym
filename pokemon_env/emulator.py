@@ -519,7 +519,7 @@ class Emulator:
             "valid_moves": valid_moves if valid_moves else [],
             "inventory": [{"item": item, "quantity": qty} for item, qty in reader.read_items()],
             "dialog": reader.read_dialog() or None,
-            "party_pokemon": []
+            "pokemons": []
         }
         
         # Add Pokemon party information
@@ -536,7 +536,7 @@ class Emulator:
                 "moves": [{"name": move, "pp": pp} for move, pp in zip(pokemon.moves, pokemon.move_pp, strict=True)],
                 "status": None if pokemon.status == StatusCondition.NONE else pokemon.status.get_status_name()
             }
-            memory_dict["party_pokemon"].append(pokemon_dict)
+            memory_dict["pokemons"].append(pokemon_dict)
             
         return memory_dict
 

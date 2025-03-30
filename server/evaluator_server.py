@@ -77,7 +77,7 @@ class GameStateResponse(BaseModel):
     valid_moves: List[str]
     inventory: List[Dict[str, Any]]
     dialog: None | str
-    party_pokemon: List[Dict[str, Any]]
+    pokemons: List[Dict[str, Any]]
     screenshot_base64: str
     collision_map: None | str
     step_number: int
@@ -144,7 +144,7 @@ def initialize_csv_logger(custom_filename=None):
         
         csv_file = open(filename, 'w', newline='')
         fieldnames = ['timestamp', 'step_number', 'action_type', 'action_details', 'badges', 
-                      'inventory', 'location', 'money', 'coordinates', 'party_size', 'dialog', 'execution_time']
+                      'inventory', 'location', 'money', 'coordinates', 'pokemons', 'dialog', 'execution_time']
         csv_writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
         csv_writer.writeheader()
         logger.info(f"Response data will be logged to {filename}")
@@ -173,7 +173,7 @@ def log_response(response: GameStateResponse, action_type: str, action_details: 
             'location': response.location,
             'money': response.money,
             'coordinates': str(response.coordinates),
-            'party_size': len(response.party_pokemon),
+            'pokemons': response.pokemons,
             'dialog': response.dialog,
             'execution_time': response.execution_time
         }
@@ -250,7 +250,7 @@ async def initialize(request: InitializeRequest):
             valid_moves=state.valid_moves,
             inventory=state.inventory,
             dialog=state.dialog,
-            party_pokemon=state.party_pokemon,
+            pokemons=state.pokemons,
             screenshot_base64=state.screenshot_base64,
             collision_map=collision_map,
             step_number=0,
@@ -349,7 +349,7 @@ async def take_action(request: ActionRequest):
             valid_moves=state.valid_moves,
             inventory=state.inventory,
             dialog=state.dialog,
-            party_pokemon=state.party_pokemon,
+            pokemons=state.pokemons,
             screenshot_base64=state.screenshot_base64,
             collision_map=collision_map,
             step_number=env.steps_taken,
