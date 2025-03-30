@@ -1,5 +1,3 @@
-import math # Import math module for potential use of infinity etc.
-
 # --- Pokémon Acquisition Difficulty Ratings (0.5 - 10.5) ---
 # Higher score means rarer, harder to obtain, or acquired later in the game
 pokemon_difficulty_ratings_refined = {
@@ -419,6 +417,6 @@ location_scores_by_name = {
 
 # Combine all ratings into one large dictionary for easy lookup
 all_difficulty_ratings = {}
-all_difficulty_ratings.update({f"{k}": v for k, v in pokemon_difficulty_ratings_refined.items()})
-all_difficulty_ratings.update({f"{k}": v for k, v in badge_difficulty_ratings.items()})
-all_difficulty_ratings.update({f"{k}": v for k, v in location_scores_by_name.items()})
+all_difficulty_ratings.update(pokemon_difficulty_ratings_refined)
+all_difficulty_ratings.update(badge_difficulty_ratings)
+all_difficulty_ratings.update(location_scores_by_name)
