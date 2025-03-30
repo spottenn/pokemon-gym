@@ -50,7 +50,7 @@ Response:
   "screenshot_base64": "base64_encoded_image",
   "location": "PALLET TOWN",
   "coordinates": [5, 6],
-  "party_pokemon": [ ... ],
+  "pokemons": [ ... ],
   "collision_map": "text representation of collision map",
   "valid_moves": ["up", "down", "left", "right"],
   "step_number": 0,

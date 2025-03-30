@@ -16,6 +16,7 @@ from PIL import Image
 
 from pokemon_env import PokemonEnvironment
 from pokemon_env.action import Action, PressKey, Wait, ActionType
+from .evaluate import PokemonEvaluator  # Import the evaluator class
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
@@ -27,6 +28,7 @@ env = None
 csv_writer = None
 csv_file = None
 last_response_time = None
+evaluator = None  # Add evaluator instance variable
 
 # Output directory structure
 OUTPUT_DIR = "gameplay_sessions"  # Base directory for all sessions
@@ -82,6 +84,7 @@ class GameStateResponse(BaseModel):
     collision_map: None | str
     step_number: int
     execution_time: float
+    score: float = 0.0  # Add a score field to the response
 
 
 def setup_session_directory():
@@ -144,7 +147,8 @@ def initialize_csv_logger(custom_filename=None):
         
         csv_file = open(filename, 'w', newline='')
         fieldnames = ['timestamp', 'step_number', 'action_type', 'action_details', 'badges', 
-                      'inventory', 'location', 'money', 'coordinates', 'pokemons', 'dialog', 'execution_time']
+                      'inventory', 'location', 'money', 'coordinates', 'pokemons', 'dialog', 
+                      'execution_time', 'score']  # Add score to fieldnames
         csv_writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
         csv_writer.writeheader()
         logger.info(f"Response data will be logged to {filename}")
@@ -158,7 +162,7 @@ def initialize_csv_logger(custom_filename=None):
 
 def log_response(response: GameStateResponse, action_type: str, action_details: Any):
     """Log a response to the CSV file."""
-    global csv_writer
+    global csv_writer, evaluator
     
     if csv_writer is None:
         return
@@ -175,11 +179,16 @@ def log_response(response: GameStateResponse, action_type: str, action_details: 
             'coordinates': str(response.coordinates),
             'pokemons': response.pokemons,
             'dialog': response.dialog,
-            'execution_time': response.execution_time
+            'execution_time': response.execution_time,
+            'score': response.score  # Add score to CSV
         }
         csv_writer.writerow(row)
         csv_file.flush()  # Ensure data is written immediately
         logger.info(f"Response data for step {response.step_number} logged to CSV")
+        
+        # Update the evaluator with the latest state
+        if evaluator:
+            evaluator.evaluate_row(row)
         
         # Save screenshot with step number and action type
         action_name = action_type
@@ -206,13 +215,16 @@ async def initialize(request: InitializeRequest):
     Returns:
         The initial game state
     """
-    global env, last_response_time
+    global env, last_response_time, evaluator
     
     # Set up a new session directory
     setup_session_directory()
     
     # Initialize CSV logger in the new session directory
     initialize_csv_logger()
+    
+    # Initialize the evaluator
+    evaluator = PokemonEvaluator()
     
     # Reset the last response time
     last_response_time = time.time()
@@ -254,11 +266,16 @@ async def initialize(request: InitializeRequest):
             screenshot_base64=state.screenshot_base64,
             collision_map=collision_map,
             step_number=0,
-            execution_time=0.0
+            execution_time=0.0,
+            score=0.0  # Initial score
         )
         
         # Log initial state
         log_response(response, "initialize", request)
+        
+        # Update score after evaluating initial state
+        if evaluator:
+            response.score = evaluator.total_score
         
         # Save initial screenshot explicitly
         save_screenshot(response.screenshot_base64, 0, "initial")
@@ -284,7 +301,7 @@ async def take_action(request: ActionRequest):
     Returns:
         The new game state after taking the action
     """
-    global env, last_response_time
+    global env, last_response_time, evaluator
     
     # Calculate execution time (time since last response)
     current_time = time.time()
@@ -353,7 +370,8 @@ async def take_action(request: ActionRequest):
             screenshot_base64=state.screenshot_base64,
             collision_map=collision_map,
             step_number=env.steps_taken,
-            execution_time=execution_time  # Use the calculated time
+            execution_time=execution_time,  # Use the calculated time
+            score=evaluator.total_score if evaluator else 0.0  # Add current score
         )
         
         # Log the action and response
@@ -375,20 +393,74 @@ async def take_action(request: ActionRequest):
 @app.get("/status")
 async def get_status():
     """Get the current status of the environment."""
+    global evaluator
+    
     if env is None:
         return {"status": "not_initialized"}
-    return {"status": "running", "steps_taken": env.steps_taken, "session_dir": current_session_dir}
+    
+    score_info = {}
+    if evaluator:
+        score_info = {
+            "score": evaluator.total_score,
+            "pokemon_count": len(evaluator.pokemon_seen),
+            "badges_count": len(evaluator.badges_earned),
+            "locations_count": len(evaluator.locations_visited)
+        }
+    
+    return {
+        "status": "running", 
+        "steps_taken": env.steps_taken, 
+        "session_dir": current_session_dir,
+        **score_info  # Include score information
+    }
 
 
 @app.post("/stop")
 async def stop_environment():
     """Stop the environment."""
-    global env, csv_file, csv_writer, current_session_dir
+    global env, csv_file, csv_writer, current_session_dir, evaluator
     
     if env is None:
         return {"status": "not_initialized"}
     
     session_path = current_session_dir
+    score_summary = {}
+    
+    # Get final score information
+    if evaluator:
+        score_summary = {
+            "final_score": evaluator.total_score,
+            "pokemon_collected": list(evaluator.pokemon_seen),
+            "badges_earned": list(evaluator.badges_earned),
+            "locations_visited": list(evaluator.locations_visited),
+            "pokemon_count": len(evaluator.pokemon_seen),
+            "badges_count": len(evaluator.badges_earned),
+            "locations_count": len(evaluator.locations_visited)
+        }
+        
+        # Generate a summary file
+        try:
+            summary_path = os.path.join(current_session_dir, "evaluation_summary.txt")
+            with open(summary_path, 'w') as f:
+                f.write("=== Pokemon Gameplay Evaluation Summary ===\n\n")
+                f.write(f"Final Score: {evaluator.total_score:.2f}\n")
+                f.write(f"Pokemon Collected: {len(evaluator.pokemon_seen)}\n")
+                f.write(f"Badges Earned: {len(evaluator.badges_earned)}\n")
+                f.write(f"Locations Visited: {len(evaluator.locations_visited)}\n\n")
+                
+                f.write("--- Pokemon Details ---\n")
+                for pokemon in sorted(evaluator.pokemon_seen):
+                    f.write(f"- {pokemon}\n")
+                
+                f.write("\n--- Badge Details ---\n")
+                for badge in sorted(evaluator.badges_earned):
+                    f.write(f"- {badge}\n")
+                
+                f.write("\n--- Location Details ---\n")
+                for location in sorted(evaluator.locations_visited):
+                    f.write(f"- {location}\n")
+        except Exception as e:
+            logger.error(f"Error writing evaluation summary: {e}")
     
     try:
         env.stop()
@@ -400,9 +472,15 @@ async def stop_environment():
             csv_file.close()
             csv_file = None
             csv_writer = None
+        
+        evaluator = None  # Reset evaluator
             
         logger.info(f"Session data saved to {session_path}")
-        return {"status": "stopped", "session_dir": session_path}
+        return {
+            "status": "stopped", 
+            "session_dir": session_path,
+            **score_summary  # Include score summary in response
+        }
     
     except Exception as e:
         logger.error(f"Error stopping environment: {e}")
@@ -410,6 +488,36 @@ async def stop_environment():
             status_code=500,
             detail=f"Failed to stop environment: {str(e)}"
         )
+
+
+# Add a new endpoint to get the current evaluation
+@app.get("/evaluate")
+async def get_evaluation():
+    """Get the current evaluation summary."""
+    global evaluator
+    
+    if evaluator is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Evaluator not initialized. Call /initialize first."
+        )
+    
+    # Return a detailed evaluation summary
+    return {
+        "score": evaluator.total_score,
+        "pokemon": {
+            "count": len(evaluator.pokemon_seen),
+            "items": list(evaluator.pokemon_seen)
+        },
+        "badges": {
+            "count": len(evaluator.badges_earned),
+            "items": list(evaluator.badges_earned)
+        },
+        "locations": {
+            "count": len(evaluator.locations_visited),
+            "items": list(evaluator.locations_visited)
+        }
+    }
 
 
 if __name__ == "__main__":

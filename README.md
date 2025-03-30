@@ -68,7 +68,7 @@ Response:
     {"item": "POKEBALL", "quantity": 5}
   ],
   "dialog": "PROF.OAK: Hello, welcome to the world of POKEMON!",
-  "party_pokemon": [
+  "pokemons": [
     {
       "nickname": "PIKACHU",
       "species": "PIKACHU",
@@ -197,7 +197,7 @@ Each action returns a game state response with the following information:
 - `valid_moves`: List of valid movement directions
 - `inventory`: List of items and quantities
 - `dialog`: Any active dialog text
-- `party_pokemon`: List of Pokemon in the party with stats
+- `pokemons`: List of Pokemon in the party with stats
 - `screenshot_base64`: Base64-encoded screenshot
 - `collision_map`: Text representation of collision map
 - `step_number`: Current step number

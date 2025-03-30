@@ -1,7 +1,7 @@
 import csv
 import os
 import ast
-from milestones import all_difficulty_ratings
+from .milestones import all_difficulty_ratings
 
 class PokemonEvaluator:
     """

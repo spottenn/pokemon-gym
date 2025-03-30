@@ -220,9 +220,9 @@ class AIServerAgent:
             content.append({"type": "text", "text": f"Dialog: {state['dialog']}"})
         
         # Add party pokemon information
-        if state['party_pokemon']:
+        if state['pokemons']:
             pokemon_info = "\nParty Pokemon:\n"
-            for i, pokemon in enumerate(state['party_pokemon']):
+            for i, pokemon in enumerate(state['pokemons']):
                 pokemon_info += f"{i+1}. {pokemon['nickname']} ({pokemon['species']}) Lv.{pokemon['level']} " \
                                f"HP: {pokemon['hp']['current']}/{pokemon['hp']['max']}\n"
             content.append({"type": "text", "text": pokemon_info})
@@ -427,7 +427,7 @@ class AIServerAgent:
                 # Display current state information
                 location = current_state['location']
                 coords = current_state['coordinates']
-                party_size = len(current_state['party_pokemon'])
+                party_size = len(current_state['pokemons'])
                 
                 logger.info(f"Location: {location}, Coordinates: {coords}, Party size: {party_size}")
         
