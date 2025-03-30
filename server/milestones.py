@@ -419,6 +419,6 @@ location_scores_by_name = {
 
 # Combine all ratings into one large dictionary for easy lookup
 all_difficulty_ratings = {}
-all_difficulty_ratings.update({f"POKEMON_{k}": v for k, v in pokemon_difficulty_ratings_refined.items()})
-all_difficulty_ratings.update({f"BADGE_{k}": v for k, v in badge_difficulty_ratings.items()})
-all_difficulty_ratings.update({f"LOCATION_{k}": v for k, v in location_scores_by_name.items()})
+all_difficulty_ratings.update({f"{k}": v for k, v in pokemon_difficulty_ratings_refined.items()})
+all_difficulty_ratings.update({f"{k}": v for k, v in badge_difficulty_ratings.items()})
+all_difficulty_ratings.update({f"{k}": v for k, v in location_scores_by_name.items()})
