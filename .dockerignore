@@ -1,0 +1,10 @@
+./gameplay_sessions
+Dockerfile
+.venv
+.git
+.gitignore
+.vscode
+.idea
+.pytest_cache
+test_agent.py
+config.py
