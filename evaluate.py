@@ -4,13 +4,22 @@ import random
 import datetime
 import logging
 import argparse
+import csv
 from typing import Dict, Any
 from pokemon_env import PokemonEnvironment, Action, PressKey, Wait
+from pokemon_env.action import ActionType
 from server.evaluate import PokemonEvaluator
 from benchflow import BenchClient
 
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
+
+# Global variables for session management
+OUTPUT_DIR = "evaluation_sessions"
+current_session_dir = None
+IMAGES_FOLDER = "images"
+CSV_WRITER = None
+CSV_FILE = None
 
 class PokemonClient(BenchClient):
     def __init__(self, intelligence_url: str, max_retry: int = 1):
@@ -22,34 +31,131 @@ class PokemonClient(BenchClient):
     def parse_response(self, raw_response: str) -> Dict[str, Any]:
         # assume the raw_response is press_key or wait plus the keys and frames
         if "press_key" in raw_response:
-            keys = raw_response.split("press_key")[1].strip()
-            return PressKey(keys)
+            keys_str = raw_response.split("press_key")[1].strip()
+            keys_list = keys_str.split()
+            return PressKey(keys=keys_list).to_dict()
         elif "wait" in raw_response:
             frames = raw_response.split("wait")[1].strip()
-            return Wait(frames)
+            return Wait(frames=int(frames)).to_dict()
         else:
             raise ValueError(f"Invalid response: {raw_response}")
 
-def generate_random_action() -> Action:
-    """
-    Generate random action
+def setup_session_directory():
+    """Create a new directory for the current evaluation session."""
+    global current_session_dir
     
-    Returns:
-        A random action (PressKey or Wait)
-    """
-    # Available keys
-    available_keys = ["a", "b", "start", "select", "up", "down", "left", "right"]
+    # Generate timestamp for unique directory name
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    session_dir = os.path.join(OUTPUT_DIR, f"evaluation_{timestamp}")
     
-    # 70% chance to select key operation, 30% chance to wait
-    if random.random() < 0.7:
-        # Select 1-2 keys
-        num_keys = random.randint(1, 2)
-        keys = random.sample(available_keys, num_keys)
-        return PressKey(keys)
-    else:
-        # Wait for 10-60 frames
-        frames = random.randint(10, 60)
-        return Wait(frames)
+    # Create session directory
+    os.makedirs(session_dir, exist_ok=True)
+    
+    # Create images subdirectory
+    images_dir = os.path.join(session_dir, IMAGES_FOLDER)
+    os.makedirs(images_dir, exist_ok=True)
+    
+    current_session_dir = session_dir
+    logger.info(f"Created session directory: {session_dir}")
+    
+    return session_dir
+
+def initialize_csv_logger():
+    """Initialize the CSV logger within the session directory."""
+    global CSV_WRITER, CSV_FILE
+    
+    try:
+        filename = os.path.join(current_session_dir, "evaluation_data.csv")
+        
+        CSV_FILE = open(filename, 'w', newline='')
+        fieldnames = ['timestamp', 'step_number', 'action_type', 'action_details', 'badges', 
+                      'inventory', 'location', 'money', 'coordinates', 'pokemons', 'dialog', 
+                      'execution_time', 'score']
+        CSV_WRITER = csv.DictWriter(CSV_FILE, fieldnames=fieldnames)
+        CSV_WRITER.writeheader()
+        logger.info(f"Evaluation data will be logged to {filename}")
+        return filename
+    except Exception as e:
+        logger.error(f"Error initializing CSV logger: {e}")
+        CSV_WRITER = None
+        if CSV_FILE:
+            CSV_FILE.close()
+            CSV_FILE = None
+        return None
+
+def log_state(state_dict, action, step_count, evaluator):
+    """Log the current state to the CSV file."""
+    global CSV_WRITER, CSV_FILE
+    
+    if CSV_WRITER is None:
+        return
+    
+    try:
+        action_type = "press_key" if isinstance(action, PressKey) else "wait"
+        action_details = action.keys if isinstance(action, PressKey) else action.frames
+        
+        row = {
+            'timestamp': datetime.datetime.now().isoformat(),
+            'step_number': step_count,
+            'action_type': action_type,
+            'action_details': str(action_details),
+            'badges': str(state_dict.get('badges', [])),
+            'inventory': str(state_dict.get('inventory', [])),
+            'location': state_dict.get('location', ''),
+            'money': state_dict.get('money', 0),
+            'coordinates': str(state_dict.get('coordinates', [])),
+            'pokemons': state_dict.get('pokemons', []),
+            'dialog': state_dict.get('dialog', ''),
+            'execution_time': state_dict.get('execution_time', 0),
+            'score': evaluator.total_score
+        }
+        CSV_WRITER.writerow(row)
+        CSV_FILE.flush()  # Ensure data is written immediately
+        
+        # If points were gained, log it to console
+        initial_score = evaluator.total_score
+        score_gained = evaluate_state(evaluator, state_dict)
+        if score_gained > 0:
+            logger.info(f"Score +{score_gained:.2f} → Total: {evaluator.total_score:.2f}")
+            
+    except Exception as e:
+        logger.error(f"Error logging to CSV: {e}")
+
+def save_evaluation_summary(evaluator, output_dir, duration, step_count):
+    """
+    Save final evaluation results to a summary file
+    
+    Args:
+        evaluator: PokemonEvaluator instance
+        output_dir: Output directory path
+        duration: Evaluation duration in seconds
+        step_count: Total number of steps taken
+    """
+    summary_file = os.path.join(output_dir, "evaluation_summary.txt")
+    
+    with open(summary_file, 'w') as f:
+        f.write("=== Pokemon Game Evaluation Summary ===\n\n")
+        f.write(f"Duration: {duration/60:.1f} minutes\n")
+        f.write(f"Total Steps: {step_count}\n")
+        f.write(f"Final Score: {evaluator.total_score:.2f}\n")
+        f.write(f"Pokemon Discovered: {len(evaluator.pokemon_seen)}\n")
+        f.write(f"Badges Earned: {len(evaluator.badges_earned)}\n")
+        f.write(f"Locations Visited: {len(evaluator.locations_visited)}\n\n")
+        
+        f.write("--- Pokemon Details ---\n")
+        for pokemon in sorted(evaluator.pokemon_seen):
+            f.write(f"- {pokemon}\n")
+        
+        f.write("\n--- Badge Details ---\n")
+        for badge in sorted(evaluator.badges_earned):
+            f.write(f"- {badge}\n")
+        
+        f.write("\n--- Location Details ---\n")
+        for location in sorted(evaluator.locations_visited):
+            f.write(f"- {location}\n")
+    
+    logger.info(f"Evaluation summary saved to: {summary_file}")
+    return summary_file
 
 
 def evaluate_state(evaluator, state_dict):
@@ -94,7 +200,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description='Evaluate Pokemon game')
     parser.add_argument('--intelligence_url', type=str, default="http://localhost:8000", help='Intelligence URL')
     parser.add_argument('--rom_path', type=str, default="Pokemon_Red.gb", help='ROM path')
-    parser.add_argument('--max_duration', type=int, default=30, help='Max duration in minutes')
+    parser.add_argument('--max_duration', type=int, default=1, help='Max duration in minutes')
     return parser.parse_args()
 
 
@@ -107,11 +213,13 @@ def main(args):
     if not os.path.exists(rom_path):
         logger.error(f"ROM file {rom_path} does not exist!")
         return
+        
     client = PokemonClient(intelligence_url="http://localhost:8000", max_retry=1)
-    # Create output directory with timestamp
-    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_dir = f"evaluation_{timestamp}"
-    os.makedirs(output_dir, exist_ok=True)
+    
+    # Create output directory and set up CSV logging
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    session_dir = setup_session_directory()
+    csv_file = initialize_csv_logger()
     
     # Initialize evaluator
     evaluator = PokemonEvaluator()
@@ -127,13 +235,13 @@ def main(args):
     
     # Set simulation parameters
     start_time = time.time()
-    max_duration = args.max_duration * 60  # 5 minutes (in seconds)
+    max_duration = args.max_duration * 60  # Convert minutes to seconds
     step_count = 0
     last_summary_time = start_time
     summary_interval = 60  # Print summary every 60 seconds
     
     logger.info(f"Starting Pokemon evaluation simulation for {max_duration/60} minutes")
-    logger.info(f"Results will be saved to: {output_dir}")
+    logger.info(f"Results will be saved to: {session_dir}")
     
     # Get initial state and evaluate
     state = env.state
@@ -151,23 +259,26 @@ def main(args):
         'screenshot_base64': state.screenshot_base64,
         'collision_map': env.get_collision_map(),
         'step_number': env.steps_taken,
-        'execution_time': start_time - start_time,
+        'execution_time': time.time() - start_time,
         'score': evaluator.total_score
     }
     
-    score_gained = evaluate_state(evaluator, state_dict)
+    # Log initial state
     
     # Main simulation loop
     try:
         while time.time() - start_time < max_duration:
             # Generate random action
             action = client.get_response(state_dict)
-            
+            if action['action_type'] == 'press_key':
+                action = PressKey(keys=action['keys'])
+            else:
+                action = Wait(int(action['frames']))
+
             # Execute action and get new state
             try:
                 new_state = env.step(action)
                 step_count += 1
-                logger.info(f"Step {step_count}: Executing action {action}")
                 
                 # Convert GameState object to dictionary
                 state_dict = {
@@ -188,19 +299,14 @@ def main(args):
                     'score': evaluator.total_score
                 }
                 
-                # Evaluate state
-                score_gained = evaluate_state(evaluator, state_dict)
-                
-                # Log progress
-                elapsed_time = time.time() - start_time
-                remaining_time = max_duration - elapsed_time
-                
-                # Print score information (if points were gained)
-                if score_gained > 0:
-                    logger.info(f"Score +{score_gained:.2f} → Total: {evaluator.total_score:.2f}")
+                # Log state to CSV and evaluate
+                log_state(state_dict, action, step_count, evaluator)
                 
                 # Print summary every minute
                 if time.time() - last_summary_time >= summary_interval:
+                    elapsed_time = time.time() - start_time
+                    remaining_time = max_duration - elapsed_time
+                    
                     logger.info(f"\n--- Status after {elapsed_time/60:.1f} minutes ---")
                     logger.info(f"Total Score: {evaluator.total_score:.2f}")
                     logger.info(f"Pokemon: {len(evaluator.pokemon_seen)} Pokemon discovered")
@@ -220,38 +326,27 @@ def main(args):
     except KeyboardInterrupt:
         logger.info("\nEvaluation interrupted by user")
     finally:
-        # Always stop the environment
+        # Always stop the environment and save results
         try:
             env.stop()
             logger.info("Environment stopped")
+            
+            # Save final evaluation summary
+            total_duration = time.time() - start_time
+            summary_file = save_evaluation_summary(evaluator, session_dir, total_duration, step_count)
+            
+            # Close CSV file
+            if CSV_FILE:
+                CSV_FILE.close()
+                logger.info("CSV file closed")
+                
+            logger.info(f"\nEvaluation completed after {total_duration/60:.1f} minutes")
+            logger.info(f"Total Score: {evaluator.total_score:.2f}")
+            logger.info(f"Total Steps: {step_count}")
+            logger.info(f"Full results saved to: {summary_file}")
+            
         except Exception as e:
-            logger.error(f"Error stopping environment: {e}")
-    
-    # Save final results to txt file
-    summary_file = os.path.join(output_dir, "evaluation_summary.txt")
-    with open(summary_file, 'w') as f:
-        f.write("=== Pokemon Game Evaluation Summary ===\n\n")
-        f.write(f"Final Score: {evaluator.total_score:.2f}\n")
-        f.write(f"Pokemon Discovered: {len(evaluator.pokemon_seen)}\n")
-        f.write(f"Badges Earned: {len(evaluator.badges_earned)}\n")
-        f.write(f"Locations Visited: {len(evaluator.locations_visited)}\n\n")
-        
-        f.write("--- Pokemon Details ---\n")
-        for pokemon in sorted(evaluator.pokemon_seen):
-            f.write(f"- {pokemon}\n")
-        
-        f.write("\n--- Badge Details ---\n")
-        for badge in sorted(evaluator.badges_earned):
-            f.write(f"- {badge}\n")
-        
-        f.write("\n--- Location Details ---\n")
-        for location in sorted(evaluator.locations_visited):
-            f.write(f"- {location}\n")
-    
-    logger.info(f"\nEvaluation completed after {(time.time() - start_time)/60:.1f} minutes")
-    logger.info(f"Total Score: {evaluator.total_score:.2f}")
-    logger.info(f"Total Steps: {step_count}")
-    logger.info(f"Full results saved to: {summary_file}")
+            logger.error(f"Error during cleanup: {e}")
 
 
 if __name__ == "__main__":
