@@ -28,6 +28,16 @@ class PokemonBench(BaseBench):
                 summary = json.load(f)
             with open(os.path.join(self.results_dir, "results.csv"), "r") as f:
                 results = f.read()
+            summary = {
+                'duration_minutes': summary['duration_minutes'],
+                'total_steps': summary['total_steps'],
+                'final_score': summary['final_score'],
+                'pokemon_discovered': summary['stats']['pokemon_discovered'],
+                'badges_earned': summary['stats']['badges_earned'],
+                'locations_visited': summary['stats']['locations_visited'],
+                'pokemon_details': summary['pokemon_details'],
+                'badge_details': summary['badge_details'],
+            }
             return BenchmarkResult(task_id=task_id, is_resolved=True, metrics=summary, log={"details": results}, other={})
         except Exception as e:
             return BenchmarkResult(task_id=task_id, is_resolved=False, metrics={}, log={"error": str(e)}, other={"error": str(e)})
