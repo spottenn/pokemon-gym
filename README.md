@@ -10,7 +10,7 @@ The PokemonEval server provides a RESTful API for agents to interact with Pokemo
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/PokemonEval.git
+git clone https://github.com/benchflow-ai/pokemon-gym.git
 cd PokemonEval
 ```
 
