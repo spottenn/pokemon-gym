@@ -4,10 +4,11 @@ from benchflow.schemas import BenchArgs
 from typing import Dict, Any
 import os
 import json
+
 class PokemonBench(BaseBench):
     def get_args(self, task_id: str) -> BenchArgs:
         arguments = {
-            "required": [""],
+            "required": [],
             "optional": {"MAX_DURATION": 30 * 60},
         }
         return BenchArgs(arguments)
