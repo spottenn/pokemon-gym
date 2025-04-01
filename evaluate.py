@@ -239,7 +239,7 @@ def main(args):
         logger.error(f"ROM file {rom_path} does not exist!")
         return
         
-    client = PokemonClient(intelligence_url="http://localhost:8000", max_retry=1)
+    client = PokemonClient(intelligence_url=args.intelligence_url, max_retry=1)
     
     # Create output directory and set up CSV logging
     os.makedirs(OUTPUT_DIR, exist_ok=True)
