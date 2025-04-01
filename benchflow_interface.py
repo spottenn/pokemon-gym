@@ -3,7 +3,7 @@ from benchflow.BaseBench import BenchmarkResult
 from benchflow.schemas import BenchArgs
 from typing import Dict, Any
 import os
-
+import json
 class PokemonBench(BaseBench):
     def get_args(self, task_id: str) -> BenchArgs:
         arguments = {
@@ -16,18 +16,17 @@ class PokemonBench(BaseBench):
         return "pokemon"
     
     def get_results_dir_in_container(self) -> str:
-        return "/app/results"
+        return "/app/evaluation_sessions/latest_evaluation"
     
     def get_log_files_dir_in_container(self) -> str:
-        return "/app/logs"
+        return "/app/evaluation_sessions/latest_evaluation"
     
     def get_result(self, task_id: str) -> BenchmarkResult:
-        results_dir = os.path.join(self.results_dir, task_id)
-        log_dir = os.path.join(self.log_files_dir, task_id)
-        return BenchmarkResult(
-            is_resolved=True,
-            message="",
-        )
+        with open(os.path.join(self.results_dir, "summary.json"), "r") as f:
+            summary = json.load(f)
+        with open(os.path.join(self.results_dir, "results.csv"), "r") as f:
+            results = f.read()
+        return BenchmarkResult(task_id=task_id, is_resolved=True, metrics=summary, log={"details": results}, other={})
     
     def get_all_tasks(self, split: str) -> Dict[str, Any]:
         return {

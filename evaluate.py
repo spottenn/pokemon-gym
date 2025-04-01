@@ -5,9 +5,10 @@ import datetime
 import logging
 import argparse
 import csv
+import json
+import shutil
 from typing import Dict, Any
-from pokemon_env import PokemonEnvironment, Action, PressKey, Wait
-from pokemon_env.action import ActionType
+from pokemon_env import PokemonEnvironment, PressKey, Wait
 from server.evaluate import PokemonEvaluator
 from benchflow import BenchClient
 
@@ -41,12 +42,20 @@ class PokemonClient(BenchClient):
             raise ValueError(f"Invalid response: {raw_response}")
 
 def setup_session_directory():
-    """Create a new directory for the current evaluation session."""
+    """Create a directory for the evaluation session."""
     global current_session_dir
     
-    # Generate timestamp for unique directory name
-    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    session_dir = os.path.join(OUTPUT_DIR, f"evaluation_{timestamp}")
+    # Use a fixed directory name instead of timestamp
+    session_dir = os.path.join(OUTPUT_DIR, "latest_evaluation")
+    
+    # Remove existing directory if it exists
+    if os.path.exists(session_dir):
+        import shutil
+        try:
+            shutil.rmtree(session_dir)
+            logger.info(f"Removed existing directory: {session_dir}")
+        except Exception as e:
+            logger.error(f"Error removing existing directory: {e}")
     
     # Create session directory
     os.makedirs(session_dir, exist_ok=True)
@@ -56,7 +65,7 @@ def setup_session_directory():
     os.makedirs(images_dir, exist_ok=True)
     
     current_session_dir = session_dir
-    logger.info(f"Created session directory: {session_dir}")
+    logger.info(f"Using session directory: {session_dir}")
     
     return session_dir
 
@@ -65,15 +74,15 @@ def initialize_csv_logger():
     global CSV_WRITER, CSV_FILE
     
     try:
-        filename = os.path.join(current_session_dir, "evaluation_data.csv")
+        filename = os.path.join(current_session_dir, "results.csv")
         
         CSV_FILE = open(filename, 'w', newline='')
         fieldnames = ['timestamp', 'step_number', 'action_type', 'action_details', 'badges', 
                       'inventory', 'location', 'money', 'coordinates', 'pokemons', 'dialog', 
-                      'execution_time', 'score']
+                      'time_interval', 'score']
         CSV_WRITER = csv.DictWriter(CSV_FILE, fieldnames=fieldnames)
         CSV_WRITER.writeheader()
-        logger.info(f"Evaluation data will be logged to {filename}")
+        logger.info(f"Results will be logged to {filename}")
         return filename
     except Exception as e:
         logger.error(f"Error initializing CSV logger: {e}")
@@ -86,11 +95,23 @@ def initialize_csv_logger():
 def log_state(state_dict, action, step_count, evaluator):
     """Log the current state to the CSV file."""
     global CSV_WRITER, CSV_FILE
+    global last_action_time
     
     if CSV_WRITER is None:
         return
     
     try:
+        # Calculate time interval since last action
+        current_time = time.time()
+        if 'last_action_time' not in globals():
+            # First action, initialize last_action_time
+            last_action_time = current_time
+            time_interval = 0.0
+        else:
+            # Calculate interval since last action
+            time_interval = current_time - last_action_time
+            last_action_time = current_time
+        
         action_type = "press_key" if isinstance(action, PressKey) else "wait"
         action_details = action.keys if isinstance(action, PressKey) else action.frames
         
@@ -106,7 +127,7 @@ def log_state(state_dict, action, step_count, evaluator):
             'coordinates': str(state_dict.get('coordinates', [])),
             'pokemons': state_dict.get('pokemons', []),
             'dialog': state_dict.get('dialog', ''),
-            'execution_time': state_dict.get('execution_time', 0),
+            'time_interval': round(time_interval, 3),  # Time since last action, in seconds
             'score': evaluator.total_score
         }
         CSV_WRITER.writerow(row)
@@ -123,7 +144,7 @@ def log_state(state_dict, action, step_count, evaluator):
 
 def save_evaluation_summary(evaluator, output_dir, duration, step_count):
     """
-    Save final evaluation results to a summary file
+    Save final evaluation results to a summary file in JSON format
     
     Args:
         evaluator: PokemonEvaluator instance
@@ -131,30 +152,34 @@ def save_evaluation_summary(evaluator, output_dir, duration, step_count):
         duration: Evaluation duration in seconds
         step_count: Total number of steps taken
     """
-    summary_file = os.path.join(output_dir, "evaluation_summary.txt")
+    summary_file = os.path.join(output_dir, "summary.json")
+    
+    # Calculate average execution time per step
+    avg_execution_time = duration / max(1, step_count)
+    
+    # Create summary data structure
+    summary_data = {
+        "duration_minutes": round(duration/60, 1),
+        "total_steps": step_count,
+        "timing": {
+            "total_execution_time": round(duration, 2),
+            "average_time_per_step": round(avg_execution_time, 3)
+        },
+        "final_score": round(evaluator.total_score, 2),
+        "stats": {
+            "pokemon_discovered": len(evaluator.pokemon_seen),
+            "badges_earned": len(evaluator.badges_earned),
+            "locations_visited": len(evaluator.locations_visited)
+        },
+        "pokemon_details": sorted(list(evaluator.pokemon_seen)),
+        "badge_details": sorted(list(evaluator.badges_earned)),
+        "location_details": sorted(list(evaluator.locations_visited))
+    }
     
     with open(summary_file, 'w') as f:
-        f.write("=== Pokemon Game Evaluation Summary ===\n\n")
-        f.write(f"Duration: {duration/60:.1f} minutes\n")
-        f.write(f"Total Steps: {step_count}\n")
-        f.write(f"Final Score: {evaluator.total_score:.2f}\n")
-        f.write(f"Pokemon Discovered: {len(evaluator.pokemon_seen)}\n")
-        f.write(f"Badges Earned: {len(evaluator.badges_earned)}\n")
-        f.write(f"Locations Visited: {len(evaluator.locations_visited)}\n\n")
-        
-        f.write("--- Pokemon Details ---\n")
-        for pokemon in sorted(evaluator.pokemon_seen):
-            f.write(f"- {pokemon}\n")
-        
-        f.write("\n--- Badge Details ---\n")
-        for badge in sorted(evaluator.badges_earned):
-            f.write(f"- {badge}\n")
-        
-        f.write("\n--- Location Details ---\n")
-        for location in sorted(evaluator.locations_visited):
-            f.write(f"- {location}\n")
+        json.dump(summary_data, f, indent=2)
     
-    logger.info(f"Evaluation summary saved to: {summary_file}")
+    logger.info(f"JSON summary saved to: {summary_file}")
     return summary_file
 
 
@@ -241,7 +266,7 @@ def main(args):
     summary_interval = 60  # Print summary every 60 seconds
     
     logger.info(f"Starting Pokemon evaluation simulation for {max_duration/60} minutes")
-    logger.info(f"Results will be saved to: {session_dir}")
+    logger.info(f"Results directory: {session_dir}")
     
     # Get initial state and evaluate
     state = env.state
@@ -259,7 +284,6 @@ def main(args):
         'screenshot_base64': state.screenshot_base64,
         'collision_map': env.get_collision_map(),
         'step_number': env.steps_taken,
-        'execution_time': time.time() - start_time,
         'score': evaluator.total_score
     }
     
@@ -295,7 +319,6 @@ def main(args):
                     'screenshot_base64': new_state.screenshot_base64,
                     'collision_map': env.get_collision_map(),
                     'step_number': env.steps_taken,
-                    'execution_time': time.time() - start_time,
                     'score': evaluator.total_score
                 }
                 
@@ -338,12 +361,11 @@ def main(args):
             # Close CSV file
             if CSV_FILE:
                 CSV_FILE.close()
-                logger.info("CSV file closed")
                 
             logger.info(f"\nEvaluation completed after {total_duration/60:.1f} minutes")
             logger.info(f"Total Score: {evaluator.total_score:.2f}")
             logger.info(f"Total Steps: {step_count}")
-            logger.info(f"Full results saved to: {summary_file}")
+            logger.info(f"Results saved to: {OUTPUT_DIR}/latest_evaluation/")
             
         except Exception as e:
             logger.error(f"Error during cleanup: {e}")
