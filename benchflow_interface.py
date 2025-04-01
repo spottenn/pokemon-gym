@@ -8,12 +8,12 @@ class PokemonBench(BaseBench):
     def get_args(self, task_id: str) -> BenchArgs:
         arguments = {
             "required": [""],
-            "optional": {"EVAL_TIME": 30 * 60},
+            "optional": {"MAX_DURATION": 30 * 60},
         }
         return BenchArgs(arguments)
     
     def get_image_name(self) -> str:
-        return "pokemon"
+        return "kirk2000/benchflow:pokemongym-v1"
     
     def get_results_dir_in_container(self) -> str:
         return "/app/evaluation_sessions/latest_evaluation"
@@ -22,11 +22,14 @@ class PokemonBench(BaseBench):
         return "/app/evaluation_sessions/latest_evaluation"
     
     def get_result(self, task_id: str) -> BenchmarkResult:
-        with open(os.path.join(self.results_dir, "summary.json"), "r") as f:
-            summary = json.load(f)
-        with open(os.path.join(self.results_dir, "results.csv"), "r") as f:
-            results = f.read()
-        return BenchmarkResult(task_id=task_id, is_resolved=True, metrics=summary, log={"details": results}, other={})
+        try:
+            with open(os.path.join(self.results_dir, "summary.json"), "r") as f:
+                summary = json.load(f)
+            with open(os.path.join(self.results_dir, "results.csv"), "r") as f:
+                results = f.read()
+            return BenchmarkResult(task_id=task_id, is_resolved=True, metrics=summary, log={"details": results}, other={})
+        except Exception as e:
+            return BenchmarkResult(task_id=task_id, is_resolved=False, metrics={}, log={"error": str(e)}, other={"error": str(e)})
     
     def get_all_tasks(self, split: str) -> Dict[str, Any]:
         return {
