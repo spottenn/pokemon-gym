@@ -32,7 +32,7 @@ LAST_RESPONSE_TIME = None
 EVALUATOR = None  # Add evaluator instance variable
 SESSION_START_TIME = None  # Track when the session started
 SESSION_TIMER = None  # Timer to track 30 minute limit
-MAX_SESSION_DURATION =4 * 60 * 60  # 30 minutes in seconds
+MAX_SESSION_DURATION = 4 * 60 * 60  # 30 minutes in seconds
 
 # Output directory structure
 OUTPUT_DIR = "gameplay_sessions"  # Base directory for all sessions
@@ -181,7 +181,7 @@ def log_response(response: GameStateResponse, action_type: str, action_details: 
             'location': response.location,
             'money': response.money,
             'coordinates': str(response.coordinates),
-            'pokemons': response.pokemons,
+            'pokemons': str(response.pokemons),  # Convert pokemons to string representation
             'dialog': response.dialog,
             'execution_time': response.execution_time,
             'score': response.score  # Add score to CSV
@@ -456,6 +456,10 @@ async def take_action(request: ActionRequest):
         # Log the action and response
         log_response(response, request.action_type, action_details)
         
+        # Update the response score after evaluation
+        if EVALUATOR:
+            response.score = EVALUATOR.total_score
+        
         # Update the last response time
         LAST_RESPONSE_TIME = time.time()
         
@@ -619,7 +623,7 @@ async def get_evaluation():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Pokemon Evaluator API Server")
     parser.add_argument("--host", type=str, default="0.0.0.0", help="Host to run the server on")
-    parser.add_argument("--port", type=int, default=8081, help="Port to run the server on")
+    parser.add_argument("--port", type=int, default=8080, help="Port to run the server on")
     parser.add_argument("--rom", type=str, default="Pokemon_Red.gb", help="Path to the Pokemon ROM file")
     parser.add_argument("--log-file", type=str, help="Custom CSV filename (optional)")
     
