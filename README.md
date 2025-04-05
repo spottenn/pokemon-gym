@@ -16,242 +16,165 @@
 
 ## Overview
 
-The PokemonEval server provides a RESTful API for agents to interact with Pokemon Red via the PyBoy emulator. This server component handles game state management, action execution, and provides a clean interface for remote evaluation of agents.
+PokemonEval is a platform that allows AI agents to play Pokemon Red through a server-client architecture. The system includes:
+
+- **Server**: A FastAPI server that controls Pokemon Red emulation and exposes game state via API
+- **Human Agent**: A UI that allows humans to play the game through keyboard controls
+- **Demo Agent**: An AI agent powered by Claude that can play the game autonomously
+- **Evaluation System**: A scoring system that rewards progress in the game (collecting Pokemon, badges, visiting locations)
+- **State Management**: Save and load game states for continued gameplay across sessions
 
 ## Installation
 
+### Prerequisites
+
+- Python 3.8+
+- PyBoy and its dependencies
+- Pokemon Red ROM file (not included)
+
+### Setup
+
 1. Clone the repository:
 ```bash
-git clone https://github.com/benchflow-ai/pokemon-gym.git
+git clone https://github.com/yourusername/PokemonEval.git
 cd PokemonEval
 ```
 
-2. Create a virtual environment and install dependencies:
+2. Install dependencies:
 ```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-3. Place a Pokemon Red ROM file in the root directory or specify its path with `--rom`.
+3. Place your Pokemon Red ROM file in the root directory and name it `Pokemon_Red.gb`
 
-## Starting the Server
+## Running the Server
 
-Run the server with:
+Start the evaluation server:
 
 ```bash
-python -m server.evaluator_server --rom path_to_your_rom
+python -m server.evaluator_server
 ```
 
-Command-line arguments:
-- `--host`: Host address to bind the server to (default: 0.0.0.0)
-- `--port`: Port to listen on (default: 8000)
-- `--rom`: Path to the Pokemon ROM file (default: "Pokemon_Red.gb")
-- `--reload`: Enable auto-reload for development
+The server will start at http://localhost:8080 by default.
 
-## Server API
+Options:
+- `--host`: Host to run the server on (default: 0.0.0.0)
+- `--port`: Port to run the server on (default: 8080)
+- `--rom`: Path to the Pokemon ROM file (default: Pokemon_Red.gb)
+- `--log-file`: Custom CSV filename (optional)
 
-### Initialize Environment
+## Playing as a Human
 
-```
-POST /initialize
-```
+You can play Pokemon Red yourself with keyboard controls:
 
-Request body:
-```json
-{
-  "headless": true,
-  "sound": false
-}
+```bash
+python human_agent.py
 ```
 
-Response:
-```json
-{
-  "player_name": "RED",
-  "rival_name": "BLUE",
-  "money": 3000,
-  "location": "PALLET TOWN",
-  "coordinates": [5, 6],
-  "badges": ["BOULDER", "CASCADE"],
-  "valid_moves": ["up", "down", "left", "right"],
-  "inventory": [
-    {"item": "POTION", "quantity": 3},
-    {"item": "POKEBALL", "quantity": 5}
-  ],
-  "dialog": "PROF.OAK: Hello, welcome to the world of POKEMON!",
-  "pokemons": [
-    {
-      "nickname": "PIKACHU",
-      "species": "PIKACHU",
-      "level": 5,
-      "hp": {"current": 20, "max": 20},
-      "moves": [{"name": "TACKLE", "pp": {"current": 35, "max": 35}}]
-    }
-  ],
-  "screenshot_base64": "base64_encoded_image_data",
-  "collision_map": "text_representation_of_collision_map",
-  "step_number": 0,
-  "execution_time": 0.123
-}
+Options:
+- `--server`: Server URL (default: http://localhost:8080)
+- `--sound`: Enable sound (requires non-headless mode)
+- `--load-state`: Path to a saved state file to load
+- `--load-autosave`: Load the latest autosave
+- `--session`: Session ID to continue a previous session (e.g., session_20250404_180209)
+
+### Controls
+
+- Arrow Keys: Move
+- Z: A button
+- X: B button
+- Enter: Start button
+- Right Shift: Select button
+- Space: Wait (advances a few frames)
+- F5: Save current state
+- F7: Load last saved state
+
+## Running the AI Agent
+
+The demo AI agent uses Claude to make decisions based on the game screen:
+
+```bash
+python demo_agent.py
 ```
 
-### Take Action
-
-```
-POST /action
-```
-
-Request body (for pressing a key):
-```json
-{
-  "action_type": "press_key",
-  "keys": ["a"]
-}
+First, set your Anthropic API key:
+```bash
+export ANTHROPIC_API_KEY=your_api_key_here
 ```
 
-Request body (for waiting):
-```json
-{
-  "action_type": "wait",
-  "frames": 60
-}
+Options:
+- `--server`: Server URL (default: http://localhost:8080)
+- `--steps`: Number of steps to run (default: 1000000)
+- `--headless`: Run in headless mode
+- `--sound`: Enable sound (requires non-headless mode)
+- `--model`: Claude model to use (default: claude-3-5-sonnet-20241022)
+- `--temperature`: Temperature for Claude (default: 1.0)
+- `--max-tokens`: Max tokens for Claude (default: 4000)
+- `--log-file`: File to save agent logs (default: agent_log.jsonl)
+- `--load-state`: Path to a saved state file to load
+- `--load-autosave`: Load the latest autosave
+- `--session`: Session ID to continue a previous session
+
+## Game State Management
+
+### Automatic Saving
+
+The server automatically saves the game state every 50 steps to an `autosave.state` file in the session directory.
+
+### Loading and Continuing Sessions
+
+You can continue from a previous session by specifying the session ID:
+
+```bash
+# Human agent with session
+python human_agent.py --session session_20250404_180209
+
+# AI agent with session
+python demo_agent.py --session session_20250404_180209
 ```
 
-Response: Same format as the initialize endpoint
+When continuing a session:
+- The system will try to load the final state (`final_state.state`)
+- The CSV file will be appended to instead of overwritten
+- The evaluation score will be preserved from the previous session
 
-### Check Status
+### Manual State Management
 
-```
-GET /status
-```
+You can manually save and load states:
 
-Response:
-```json
-{
-  "status": "running",
-  "steps_taken": 42,
-  "average_action_time": 0.156
-}
-```
+1. **Human Agent**: Use F5 to save and F7 to load
+2. **Session Management**: Use the `--session` parameter to continue from a specific session directory
+3. **Custom States**: Use `--load-state` to load from a specific state file
 
-### Stop Environment
+## Session Data
 
-```
-POST /stop
-```
+For each gameplay session, the following data is stored in the `gameplay_sessions` directory:
 
-Response:
-```json
-{
-  "status": "stopped",
-  "steps_taken": 42
-}
-```
+- `gameplay_data.csv`: Game state data for each step
+- `evaluation_summary.txt`: Final evaluation scores and achievements
+- `images/`: Screenshots of each step
+- `autosave.state`: Most recent automatic save
+- `final_state.state`: State saved when the session ends
 
-## Action Types
+## Evaluation System
 
-The server supports two types of actions:
+The evaluation system scores your gameplay based on:
+- Pokemon collected
+- Badges earned
+- Locations visited
 
-### 1. Press Key
+The score is persistently tracked and shown during gameplay.
 
-Used to press one or more Game Boy buttons in sequence.
+## API Endpoints
 
-```json
-{
-  "action_type": "press_key",
-  "keys": ["a"]
-}
-```
+The server provides the following API endpoints:
 
-Valid keys:
-- `"a"` - A button
-- `"b"` - B button
-- `"start"` - Start button
-- `"select"` - Select button
-- `"up"` - D-pad Up
-- `"down"` - D-pad Down
-- `"left"` - D-pad Left
-- `"right"` - D-pad Right
+- `POST /initialize`: Initialize the environment
+- `POST /action`: Take an action in the environment
+- `GET /status`: Get the current status
+- `POST /stop`: Stop the environment
+- `GET /evaluate`: Get the current evaluation summary
 
-You can send multiple keys in a sequence:
-```json
-{
-  "action_type": "press_key",
-  "keys": ["up", "up", "a"]
-}
-```
+## Creating Your Own Agents
 
-### 2. Wait
-
-Used to wait for a specified number of frames.
-
-```json
-{
-  "action_type": "wait",
-  "frames": 60
-}
-```
-
-Where:
-- `frames` is the number of frames to wait (at 60 FPS, 60 frames = 1 second)
-
-## Game State Response
-
-Each action returns a game state response with the following information:
-
-- `player_name`: Player character name
-- `rival_name`: Rival character name
-- `money`: Current money
-- `location`: Current location name
-- `coordinates`: Player [x, y] coordinates
-- `badges`: List of obtained badges
-- `valid_moves`: List of valid movement directions
-- `inventory`: List of items and quantities
-- `dialog`: Any active dialog text
-- `pokemons`: List of Pokemon in the party with stats
-- `screenshot_base64`: Base64-encoded screenshot
-- `collision_map`: Text representation of collision map
-- `step_number`: Current step number
-- `execution_time`: Time taken to execute the action
-
-## Client Implementation Example
-
-Here's a simple Python example for interacting with the server:
-
-```python
-import requests
-
-# Server URL
-SERVER_URL = "http://localhost:8000"
-
-# Initialize environment
-response = requests.post(
-    f"{SERVER_URL}/initialize",
-    json={"headless": True, "sound": False}
-)
-state = response.json()
-
-# Press a button
-response = requests.post(
-    f"{SERVER_URL}/action",
-    json={"action_type": "press_key", "keys": ["a"]}
-)
-state = response.json()
-
-# Wait for frames
-response = requests.post(
-    f"{SERVER_URL}/action",
-    json={"action_type": "wait", "frames": 60}
-)
-state = response.json()
-
-# Stop environment
-requests.post(f"{SERVER_URL}/stop")
-```
-
-## Notes
-
-- The server maintains session data and images in the `gameplay_sessions` directory
-- All screenshots are saved in the session's `images` folder
-- Gameplay data is logged to a CSV file in the session directory 
+You can create your own agents by implementing a client that communicates with the server API. Refer to `human_agent.py` or `demo_agent.py` for examples.

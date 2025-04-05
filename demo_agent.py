@@ -175,13 +175,18 @@ class AIServerAgent:
         with open(self.log_file, 'a', encoding='utf-8') as f:
             f.write(json.dumps(log_entry, ensure_ascii=False) + '\n')
     
-    def initialize(self, headless: bool = True, sound: bool = False) -> Dict[str, Any]:
+    def initialize(self, headless: bool = True, sound: bool = False,
+                  load_state_file: str = None, load_autosave: bool = False,
+                  session_id: str = None) -> Dict[str, Any]:
         """
         Initialize the game environment
         
         Args:
             headless: Whether to run without a GUI
             sound: Whether to enable sound
+            load_state_file: Optional path to a saved state file to load
+            load_autosave: Whether to load the latest autosave
+            session_id: Optional session ID to continue an existing session
             
         Returns:
             Initial game state
@@ -189,13 +194,27 @@ class AIServerAgent:
         try:
             logger.info("Initializing environment...")
             
+            # Prepare initialization parameters
+            init_params = {
+                "headless": headless,
+                "sound": sound,
+                "load_autosave": load_autosave
+            }
+            
+            # Add load_state_file if provided
+            if load_state_file:
+                init_params["load_state_file"] = load_state_file
+                logger.info(f"Will try to load state from {load_state_file}")
+            
+            # Add session_id if provided
+            if session_id:
+                init_params["session_id"] = session_id
+                logger.info(f"Will continue existing session: {session_id}")
+            
             response = self.session.post(
                 f"{self.server_url}/initialize",
                 headers={"Content-Type": "application/json"},
-                json={
-                    "headless": headless,
-                    "sound": sound
-                }
+                json=init_params
             )
             
             response.raise_for_status()
@@ -217,6 +236,7 @@ class AIServerAgent:
                         "coordinates": self.current_state.get('coordinates', []),
                         "money": self.current_state.get('money', 0),
                         "badges": self.current_state.get('badges', []),
+                        "score": self.current_state.get('score', 0.0),  # Add score to log
                     }
                 }
                 f.write(json.dumps(initial_entry, ensure_ascii=False) + '\n')
@@ -326,6 +346,7 @@ class AIServerAgent:
             {"type": "text", "text": f"\nGame state information:"},
             {"type": "text", "text": f"Location: {state['location']}"},
             {"type": "text", "text": f"Coordinates: {state['coordinates']}"},
+            {"type": "text", "text": f"Score: {state.get('score', 0.0)}"},
             {"type": "text", "text": f"Dialog: {state['dialog']}"},
             {"type": "text", "text": f"Pokemons: {state['pokemons']}"},
             {"type": "text", "text": f"Inventory: {state['inventory']}"},
@@ -616,8 +637,9 @@ class AIServerAgent:
                     location = current_state['location']
                     coords = current_state['coordinates']
                     party_size = len(current_state['pokemons'])
+                    score = current_state.get('score', 0.0)
                     
-                    logger.info(f"Location: {location}, Coordinates: {coords}, Party size: {party_size}")
+                    logger.info(f"Location: {location}, Coordinates: {coords}, Party size: {party_size}, Score: {score:.1f}")
                     
                     # Small delay between steps to avoid overwhelming API
                     time.sleep(0.5)
@@ -696,6 +718,9 @@ def main():
     parser.add_argument("--log-file", type=str, default="agent_log.jsonl", help="File to save agent logs")
     parser.add_argument("--max-retries", type=int, default=5, help="Maximum retries for API calls")
     parser.add_argument("--retry-delay", type=float, default=1.0, help="Base delay between retries in seconds")
+    parser.add_argument("--load-state", type=str, help="Path to a saved state file to load")
+    parser.add_argument("--load-autosave", action="store_true", help="Load the latest autosave")
+    parser.add_argument("--session", type=str, help="Session ID to continue (e.g., session_20250404_180209)")
     
     args = parser.parse_args()
     
@@ -712,7 +737,13 @@ def main():
     
     try:
         # Initialize environment
-        initial_state = agent.initialize(headless=args.headless, sound=args.sound)
+        initial_state = agent.initialize(
+            headless=args.headless, 
+            sound=args.sound,
+            load_state_file=args.load_state,
+            load_autosave=args.load_autosave,
+            session_id=args.session
+        )
         
         # Run AI Agent
         logger.info(f"Starting AI Agent, max steps: {args.steps}")
