@@ -1,6 +1,18 @@
-# PokemonEval Server
+# PokemonGym   
+<div align="center">
+  <a href="https://discord.gg/mZ9Rc8q8W3" target="_blank">
+    <img src="https://img.shields.io/badge/Join%20our%20Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Join our Discord">
+  </a>
+  <p>
+    A server for evaluating AI agents on Pokemon Red gameplay.
+  </p>
+  
+</div>
 
-A server for evaluating AI agents on Pokemon Red gameplay.
+
+
+
+![Group 1 (1)](https://github.com/user-attachments/assets/25f3da86-0335-4324-8dab-f64f0d6791bf)
 
 ## Overview
 
