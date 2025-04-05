@@ -119,7 +119,11 @@ Options:
 
 ### Automatic Saving
 
-The server automatically saves the game state every 50 steps to an `autosave.state` file in the session directory.
+The server automatically saves the game state every 50 steps to an `autosave.state` file in the session directory. Additionally, the final state is saved when stopping a session, and on timeout events.
+
+### Manual Saving
+
+When playing as a human, you can save the current state at any time by pressing F5. This creates a state file that you can load later.
 
 ### Loading and Continuing Sessions
 
@@ -134,47 +138,114 @@ python demo_agent.py --session session_20250404_180209
 ```
 
 When continuing a session:
-- The system will try to load the final state (`final_state.state`)
+- The system will automatically load the final state (`final_state.state`)
 - The CSV file will be appended to instead of overwritten
 - The evaluation score will be preserved from the previous session
 
-### Manual State Management
+### Manual State Loading
 
-You can manually save and load states:
+You can manually load states in several ways:
 
-1. **Human Agent**: Use F5 to save and F7 to load
-2. **Session Management**: Use the `--session` parameter to continue from a specific session directory
-3. **Custom States**: Use `--load-state` to load from a specific state file
+1. **During Gameplay**: Human players can press F7 to load the most recently saved state
+2. **Session Parameter**: Use the `--session` parameter to continue from a specific session directory
+3. **State File Parameter**: Use `--load-state` to load from a specific state file path
+4. **Autosave Parameter**: Use `--load-autosave` to load the most recent autosave
+
+## Evaluation System
+
+The evaluation system tracks and scores your gameplay progress based on:
+
+- **Pokemon Collection**: Points for each unique Pokemon caught
+- **Badges Earned**: Points for each gym badge obtained
+- **Locations Visited**: Points for discovering new areas
+- **Game Progression**: Points for key game events and milestones
+
+The score is persistently tracked and displayed during gameplay. When continuing from a previous session, the evaluation state is loaded to maintain score continuity.
 
 ## Session Data
 
-For each gameplay session, the following data is stored in the `gameplay_sessions` directory:
+For each gameplay session, the following data is stored in the `gameplay_sessions/[session_id]` directory:
 
 - `gameplay_data.csv`: Game state data for each step
 - `evaluation_summary.txt`: Final evaluation scores and achievements
 - `images/`: Screenshots of each step
-- `autosave.state`: Most recent automatic save
-- `final_state.state`: State saved when the session ends
-
-## Evaluation System
-
-The evaluation system scores your gameplay based on:
-- Pokemon collected
-- Badges earned
-- Locations visited
-
-The score is persistently tracked and shown during gameplay.
+- `autosave.state`: Most recent automatic save (every 50 steps)
+- `final_state.state`: State saved when the session ends normally
+- `timeout_state.state`: State saved if the session times out
 
 ## API Endpoints
 
 The server provides the following API endpoints:
 
 - `POST /initialize`: Initialize the environment
+  - Parameters: `headless`, `sound`, `load_state_file`, `load_autosave`, `session_id`
 - `POST /action`: Take an action in the environment
-- `GET /status`: Get the current status
-- `POST /stop`: Stop the environment
+  - Action types: `press_key` (with keys), `wait` (with frames)
+- `GET /status`: Get the current status of the environment
+- `POST /stop`: Stop the environment and save final state
 - `GET /evaluate`: Get the current evaluation summary
+- `POST /save_state`: Save the current state to a file
+- `POST /load_state`: Load a state from a file
 
 ## Creating Your Own Agents
 
 You can create your own agents by implementing a client that communicates with the server API. Refer to `human_agent.py` or `demo_agent.py` for examples.
+
+### Implementing an Agent
+
+Your agent should:
+
+1. **Initialize**: Call the `/initialize` endpoint to start a session
+2. **Observe**: Process the returned game state (image, location, party, etc.)
+3. **Decide**: Determine the next action to take
+4. **Act**: Call the `/action` endpoint with your chosen action
+5. **Repeat**: Continue the observe-decide-act loop
+6. **Stop**: Call the `/stop` endpoint when finished
+
+### Example Minimal Agent
+
+```python
+import requests
+
+class MinimalAgent:
+    def __init__(self, server_url="http://localhost:8080"):
+        self.server_url = server_url
+        self.session = requests.Session()
+        
+    def initialize(self):
+        response = self.session.post(
+            f"{self.server_url}/initialize",
+            json={"headless": True, "sound": False}
+        )
+        return response.json()
+        
+    def take_action(self, action_type, **kwargs):
+        response = self.session.post(
+            f"{self.server_url}/action",
+            json={"action_type": action_type, **kwargs}
+        )
+        return response.json()
+        
+    def stop(self):
+        self.session.post(f"{self.server_url}/stop")
+        
+    def run(self):
+        # Initialize
+        state = self.initialize()
+        
+        # Take 10 random actions
+        for i in range(10):
+            # Press the A button
+            state = self.take_action("press_key", keys=["a"])
+            
+            # Wait 30 frames
+            state = self.take_action("wait", frames=30)
+            
+        # Stop the environment
+        self.stop()
+
+# Use the agent
+if __name__ == "__main__":
+    agent = MinimalAgent()
+    agent.run()
+```

@@ -27,36 +27,66 @@ python human_agent.py
 ```
 
 Command-line arguments:
-- `--server`: URL of the PokemonEval server (default: http://localhost:8000)
+- `--server`: URL of the PokemonEval server (default: http://localhost:8080)
 - `--sound`: Enable sound (optional)
-- `--save-screenshots`: Save screenshots locally (optional)
-- `--screenshot-dir`: Directory to save screenshots (default: "human_screenshots")
+- `--load-state`: Path to a saved state file to load
+- `--load-autosave`: Load the latest autosave
+- `--session`: Session ID to continue a previous session (e.g., session_20250404_180209)
 
 ## Controls
 
 The Human Agent maps keyboard keys to Game Boy buttons:
 
-| Keyboard Key | Game Boy Button |
-|--------------|-----------------|
-| Arrow Up     | D-pad Up        |
-| Arrow Down   | D-pad Down      |
-| Arrow Left   | D-pad Left      |
-| Arrow Right  | D-pad Right     |
-| Z            | A button        |
-| X            | B button        |
-| Enter        | Start button    |
-| Right Shift  | Select button   |
-| Space        | Wait (30 frames)|
-| Escape       | Quit            |
+| Keyboard Key | Function               |
+|--------------|------------------------|
+| Arrow Up     | D-pad Up               |
+| Arrow Down   | D-pad Down             |
+| Arrow Left   | D-pad Left             |
+| Arrow Right  | D-pad Right            |
+| Z            | A button               |
+| X            | B button               |
+| Enter        | Start button           |
+| Right Shift  | Select button          |
+| Space        | Wait (30 frames)       |
+| F5           | Save state             |
+| F7           | Load saved state       |
+| Escape       | Quit                   |
 
 ## Interface
 
 The Human Agent provides a Pygame window with:
 
 1. Game screen at 3x original size (480x432 pixels)
-2. Current location and coordinates display at the top
+2. Current location, coordinates, step count, and score display at the top
 3. Control information at the bottom
 4. Step counter to track your progress
+
+## State Management
+
+### Saving Game States
+
+You can save the current game state at any time by pressing F5. This saves a state file in the current session directory that you can load later. Additionally, the server automatically saves the game state every 50 steps.
+
+### Loading Game States
+
+You can load a previously saved state by:
+
+1. Pressing F7 during gameplay to load the most recently saved state
+2. Using the `--load-state` parameter to load a specific state file
+3. Using the `--load-autosave` parameter to load the automatic save
+
+### Session Continuation
+
+To continue a previous gameplay session:
+
+```bash
+python human_agent.py --session session_20250404_180209
+```
+
+When you continue a session:
+- The system will automatically load the final state from the session
+- All game progress and scores will be preserved
+- New gameplay data will be appended to the existing record
 
 ## Implementation Details
 
@@ -65,13 +95,18 @@ The Human Agent provides a Pygame window with:
 The Human Agent initializes the Pokemon environment through the server:
 
 ```python
-def initialize(self, headless: bool = False, sound: bool = False):
+def initialize(self, headless: bool = False, sound: bool = False,
+              load_state_file: str = None, load_autosave: bool = False,
+              session_id: str = None):
     response = self.session.post(
         f"{self.server_url}/initialize",
         headers={"Content-Type": "application/json"},
         json={
             "headless": headless,
-            "sound": sound
+            "sound": sound,
+            "load_state_file": load_state_file,
+            "load_autosave": load_autosave,
+            "session_id": session_id
         }
     )
     self.current_state = response.json()
@@ -95,6 +130,14 @@ for event in pygame.event.get():
             if key == "wait":
                 # Execute wait action
                 self.take_action("wait", frames=DEFAULT_WAIT_FRAMES)
+            elif key == "save":
+                # Save game state
+                self.save_state(DEFAULT_SAVE_FILENAME)
+            elif key == "load":
+                # Load saved game state
+                if self.saved_state_path:
+                    self.initialize(headless=False, sound=True, 
+                                   load_state_file=self.saved_state_path)
             else:
                 # Execute press key action
                 self.take_action("press_key", keys=[key])
@@ -115,7 +158,13 @@ def update_display(self, state):
     pygame_image = pygame.image.fromstring(image.tobytes(), image.size, image.mode)
     self.screen.blit(pygame_image, (0, 0))
     
-    # Display game information and controls
+    # Display game information including score
+    info_text = f"Location: {state['location']} | Coords: {state['coordinates']} | Step: {self.step_count} | Score: {self.score:.1f}"
+    
+    # Display controls with save/load options
+    controls_text = "Controls: Arrows = Move | Z = A | X = B | Enter = Start | R-Shift = Select | Space = Wait | F5 = Save | F7 = Load"
+    
+    # Render and display text
     # ...
     
     pygame.display.flip()
@@ -129,10 +178,21 @@ Here's how to use the Human Agent in your own code:
 from human_agent import HumanAgent
 
 # Create the agent
-agent = HumanAgent(server_url="http://localhost:8000")
+agent = HumanAgent(server_url="http://localhost:8080")
 
-# Initialize and start the game
-agent.initialize(headless=False, sound=True)
+# Initialize and start the game with a previous session
+agent.initialize(
+    headless=False, 
+    sound=True,
+    session_id="session_20250404_180209"
+)
+
+# Or load a specific saved state
+agent.initialize(
+    headless=False,
+    sound=True,
+    load_state_file="gameplay_sessions/session_20250404_180209/final_state.state"
+)
 
 # Run the game (this will start the pygame event loop)
 agent.run()
@@ -148,7 +208,8 @@ The Human Agent is useful for:
 1. **Baseline Performance**: Establish human baseline performance for comparison with AI agents
 2. **Data Collection**: Gather human gameplay data for training imitation learning agents
 3. **Verification**: Verify that the environment works correctly with human input
-4. **Enjoyment**: Simply enjoy playing Pokemon Red through the evaluation framework
+4. **Progress Tracking**: Track your progress and scores across multiple sessions
+5. **Enjoyment**: Simply enjoy playing Pokemon Red through the evaluation framework
 
 ## Troubleshooting
 
@@ -156,6 +217,7 @@ The Human Agent is useful for:
 - If the game doesn't respond to input, check if the server is running properly
 - If the display is blank, ensure the server is returning valid screenshots
 - If the game seems slow, reduce the server load or try running on a more powerful machine
+- If a save state fails to load, check that the file exists and path is correct
 
 ## Next Steps
 
