@@ -65,7 +65,8 @@ class HumanAgent:
         self.font = pygame.font.SysFont('Arial', 14)
         
     def initialize(self, headless: bool = False, sound: bool = False, 
-                  load_state_file: str = None, load_autosave: bool = False) -> Dict[str, Any]:
+                  load_state_file: str = None, load_autosave: bool = False,
+                  session_id: str = None) -> Dict[str, Any]:
         """
         Initialize the game environment
         
@@ -74,6 +75,7 @@ class HumanAgent:
             sound: Whether to enable sound
             load_state_file: Optional path to a saved state file to load
             load_autosave: Whether to load the latest autosave
+            session_id: Optional session ID to continue an existing session
             
         Returns:
             Initial game state
@@ -92,6 +94,11 @@ class HumanAgent:
             if load_state_file:
                 init_params["load_state_file"] = load_state_file
                 logger.info(f"Will try to load state from {load_state_file}")
+                
+            # Add session_id if provided
+            if session_id:
+                init_params["session_id"] = session_id
+                logger.info(f"Will continue existing session: {session_id}")
             
             response = self.session.post(
                 f"{self.server_url}/initialize",
@@ -340,6 +347,7 @@ def main():
     parser.add_argument("--sound", action="store_true", help="Enable sound")
     parser.add_argument("--load-state", type=str, help="Path to a saved state file to load")
     parser.add_argument("--load-autosave", action="store_true", help="Load the latest autosave")
+    parser.add_argument("--session", type=str, help="Session ID to continue (e.g., session_20250404_180209)")
     
     args = parser.parse_args()
     
@@ -352,7 +360,8 @@ def main():
             headless=False, 
             sound=args.sound,
             load_state_file=args.load_state,
-            load_autosave=args.load_autosave
+            load_autosave=args.load_autosave,
+            session_id=args.session
         )
         
         # Run Human Agent

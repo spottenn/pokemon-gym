@@ -67,6 +67,7 @@ class InitializeRequest(BaseModel):
     sound: bool = False
     load_state_file: Optional[str] = None  # Optional path to a saved state file
     load_autosave: bool = False  # Whether to load the latest autosave
+    session_id: Optional[str] = None  # Optional session ID to continue an existing session
 
 
 class ActionRequest(BaseModel):
@@ -99,23 +100,38 @@ class SaveStateRequest(BaseModel):
     filename: Optional[str] = None  # Optional custom filename
 
 
-def setup_session_directory():
-    """Create a new directory for the current gameplay session."""
+def setup_session_directory(session_id: Optional[str] = None):
+    """Create a new directory for the current gameplay session or use an existing one."""
     global current_session_dir
     
-    # Generate timestamp for unique directory name
-    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    session_dir = os.path.join(OUTPUT_DIR, f"session_{timestamp}")
-    
-    # Create session directory
-    os.makedirs(session_dir, exist_ok=True)
-    
-    # Create images subdirectory
-    images_dir = os.path.join(session_dir, IMAGES_FOLDER)
-    os.makedirs(images_dir, exist_ok=True)
+    if session_id:
+        # Use existing session directory if provided
+        session_dir = os.path.join(OUTPUT_DIR, session_id)
+        if not os.path.exists(session_dir):
+            logger.warning(f"Specified session directory '{session_id}' not found. Creating it.")
+            os.makedirs(session_dir, exist_ok=True)
+            # Create images subdirectory if it doesn't exist
+            images_dir = os.path.join(session_dir, IMAGES_FOLDER)
+            os.makedirs(images_dir, exist_ok=True)
+        else:
+            logger.info(f"Using existing session directory: {session_dir}")
+            # Make sure images directory exists
+            images_dir = os.path.join(session_dir, IMAGES_FOLDER)
+            os.makedirs(images_dir, exist_ok=True)
+    else:
+        # Generate timestamp for unique directory name
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        session_dir = os.path.join(OUTPUT_DIR, f"session_{timestamp}")
+        
+        # Create session directory
+        os.makedirs(session_dir, exist_ok=True)
+        
+        # Create images subdirectory
+        images_dir = os.path.join(session_dir, IMAGES_FOLDER)
+        os.makedirs(images_dir, exist_ok=True)
     
     current_session_dir = session_dir
-    logger.info(f"Created session directory: {session_dir}")
+    logger.info(f"Session directory: {session_dir}")
     
     return session_dir
 
@@ -145,7 +161,7 @@ def save_screenshot(screenshot_base64: str, step_number: int, action_type: str) 
         logger.error(f"Error saving screenshot: {e}")
 
 
-def initialize_csv_logger(custom_filename=None):
+def initialize_csv_logger(custom_filename=None, append_mode=False):
     """Initialize the CSV logger within the session directory."""
     global CSV_WRITER, CSV_FILE
     
@@ -157,13 +173,22 @@ def initialize_csv_logger(custom_filename=None):
             # Otherwise use a default name
             filename = os.path.join(current_session_dir, "gameplay_data.csv")
         
-        CSV_FILE = open(filename, 'w', newline='')
+        # Check if we should append to existing file
+        file_exists = os.path.exists(filename)
+        file_mode = 'a' if append_mode and file_exists else 'w'
+        
+        CSV_FILE = open(filename, file_mode, newline='')
         fieldnames = ['timestamp', 'step_number', 'action_type', 'action_details', 'badges', 
                       'inventory', 'location', 'money', 'coordinates', 'pokemons', 'dialog', 
-                      'execution_time', 'score']  # Add score to fieldnames
+                      'execution_time', 'score']
+        
         CSV_WRITER = csv.DictWriter(CSV_FILE, fieldnames=fieldnames)
-        CSV_WRITER.writeheader()
-        logger.info(f"Response data will be logged to {filename}")
+        
+        # Only write header if creating a new file or not in append mode
+        if not (append_mode and file_exists):
+            CSV_WRITER.writeheader()
+            
+        logger.info(f"Response data will be logged to {filename} (mode: {file_mode})")
     except Exception as e:
         logger.error(f"Error initializing CSV logger: {e}")
         CSV_WRITER = None
@@ -285,14 +310,44 @@ async def initialize(request: InitializeRequest):
             logger.error(f"Error stopping existing environment: {e}")
         ENV = None
     
-    # Set up a new session directory
-    setup_session_directory()
-
-    # Initialize CSV logger in the new session directory
-    initialize_csv_logger()
+    # Set up a session directory - either new or existing
+    setup_session_directory(request.session_id)
+    
+    # Check for state files if using existing session
+    state_file_to_load = None
+    if request.session_id:
+        final_state_path = os.path.join(current_session_dir, "final_state.state")
+        autosave_path = os.path.join(current_session_dir, AUTOSAVE_FILENAME)
+        
+        if request.load_state_file:
+            # If specific state file is provided, use it first
+            state_file_to_load = request.load_state_file
+        elif os.path.exists(final_state_path):
+            # Otherwise check for final_state.state
+            state_file_to_load = final_state_path
+            logger.info(f"Found final state file in session: {final_state_path}")
+        elif request.load_autosave and os.path.exists(autosave_path):
+            # Or use autosave if requested
+            state_file_to_load = autosave_path
+            logger.info(f"Found autosave file in session: {autosave_path}")
+        
+        # Initialize CSV logger in append mode for existing session
+        initialize_csv_logger(append_mode=True)
+    else:
+        # New session - set state file if specified
+        if request.load_state_file:
+            state_file_to_load = request.load_state_file
+        
+        # Initialize CSV logger in create mode for new session  
+        initialize_csv_logger()
     
     # Initialize the evaluator
     EVALUATOR = PokemonEvaluator()
+    
+    # If continuing an existing session, load the evaluator state from it
+    if request.session_id:
+        logger.info(f"Loading evaluation state from session {request.session_id}")
+        EVALUATOR.load_state_from_session(current_session_dir)
     
     # Reset the last response time
     LAST_RESPONSE_TIME = time.time()
@@ -315,19 +370,19 @@ async def initialize(request: InitializeRequest):
         )
         logger.info("env initialized")
         
-        # If a state file was provided, load it
-        if request.load_state_file:
-            if not os.path.exists(request.load_state_file):
+        # If we have a state file to load, load it
+        if state_file_to_load:
+            if not os.path.exists(state_file_to_load):
                 raise HTTPException(
                     status_code=400,
-                    detail=f"State file not found: {request.load_state_file}"
+                    detail=f"State file not found: {state_file_to_load}"
                 )
             
-            logger.info(f"Loading state from file: {request.load_state_file}")
-            ENV.load_state(request.load_state_file)
+            logger.info(f"Loading state from file: {state_file_to_load}")
+            ENV.load_state(state_file_to_load)
             logger.info("State loaded successfully")
-        # If explicitly asked to load autosave
-        elif request.load_autosave:
+        # Else if explicitly asked to load autosave (and we didn't already load a state)
+        elif request.load_autosave and not request.session_id:
             autosave_path = os.path.join(current_session_dir, AUTOSAVE_FILENAME)
             if os.path.exists(autosave_path):
                 try:
