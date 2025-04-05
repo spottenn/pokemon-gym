@@ -107,6 +107,29 @@ class PokemonEvaluator:
         
         return self.total_score
     
+    def load_state_from_session(self, session_dir):
+        """
+        Load evaluation state from an existing session directory
+        
+        Args:
+            session_dir (str): Path to the session directory
+            
+        Returns:
+            bool: True if state was loaded successfully, False otherwise
+        """
+        # Reset current state
+        self.reset()
+        
+        # Look for the gameplay data CSV file
+        csv_path = os.path.join(session_dir, "gameplay_data.csv")
+        if os.path.exists(csv_path):
+            print(f"Loading evaluation state from {csv_path}")
+            self.evaluate_csv(csv_path)
+            return True
+        else:
+            print(f"No gameplay data file found in {session_dir}")
+            return False
+    
     def print_summary(self):
         """Print evaluation summary"""
         print("\n=== Evaluation Summary ===")

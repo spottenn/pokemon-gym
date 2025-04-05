@@ -1,15 +1,16 @@
 # PokemonEval Demo Agent
 
-A demonstration agent for interacting with the PokemonEval server.
+This document explains how to use the demo agent for the Pokemon Red evaluation framework.
 
 ## Overview
 
-The Demo Agent provides a simple implementation that demonstrates how to connect to the PokemonEval server and interact with the Pokemon Red game. This agent includes:
+The Demo Agent is a Claude-powered AI agent that can play Pokemon Red through the PokemonEval server. It demonstrates how to build an AI agent that can:
 
-- Basic server communication
-- Game state processing
-- Random action generation
-- Claude integration for intelligent decisions
+1. Connect to the PokemonEval server
+2. Observe the game state
+3. Make decisions based on the observed state
+4. Take actions to play the game
+5. Track performance metrics and scores
 
 ## Installation
 
@@ -18,141 +19,220 @@ The Demo Agent provides a simple implementation that demonstrates how to connect
 pip install -r requirements.txt
 ```
 
-2. Set up your Anthropic API key as an environment variable:
+2. Set up your Claude API key:
 ```bash
-export ANTHROPIC_API_KEY=your_api_key_here
+export ANTHROPIC_API_KEY=your-api-key
 ```
 
 ## Running the Demo Agent
 
-Run the demo agent with:
+Start the Demo Agent with:
 
 ```bash
-python demo_agent.py --server http://localhost:8000 --steps 100
+python demo_agent.py
 ```
 
 Command-line arguments:
-- `--server`: URL of the PokemonEval server (default: http://localhost:8000)
-- `--steps`: Number of steps to run (default: 100)
-- `--headless`: Run the server in headless mode (optional)
-- `--sound`: Enable sound (optional, requires non-headless mode)
-- `--model`: Claude model to use (default: claude-3-7-sonnet-20250219)
-- `--temperature`: Temperature parameter for Claude (default: 1.0)
-- `--max-tokens`: Maximum number of tokens for Claude response (default: 4000)
-- `--save-screenshots`: Save screenshots locally (optional)
-- `--screenshot-dir`: Directory to save screenshots (default: "screenshots")
+- `--server`: URL of the PokemonEval server (default: http://localhost:8080)
+- `--headless`: Run without displaying the game (default: False)
+- `--sound`: Enable sound (default: False)
+- `--load-state`: Path to a saved state file to load
+- `--load-autosave`: Load the latest autosave
+- `--session`: Session ID to continue a previous session
 
-## Agent Architecture
+## Architecture
 
-The demo agent has the following components:
+The Demo Agent has the following components:
 
-### 1. Server Connection
+1. **AIServerAgent**: Main class that:
+   - Communicates with the PokemonEval server
+   - Manages the game state
+   - Calls Claude for decision making
+   - Executes actions based on Claude's decisions
 
-The agent connects to the PokemonEval server via HTTP requests, sending action commands and receiving game state updates.
+2. **Decision Loop**:
+   - Observe the current state
+   - Send state information to Claude
+   - Parse Claude's response
+   - Execute the chosen action
+   - Repeat
 
-```python
-# Initialize the environment
-state = agent.initialize(headless=True, sound=False)
+3. **State Representation**:
+   - Game screenshot (base64 encoded)
+   - Current location
+   - Coordinates in the game world
+   - Player's party information
+   - Current score and performance metrics
 
-# Take actions
-state = agent.take_action("press_key", keys=["a"])
-state = agent.take_action("wait", frames=30)
+## State Management
 
-# Stop the environment
-agent.stop()
+The Demo Agent supports several state management features:
+
+### Loading Game States
+
+You can load a previously saved state by:
+
+```bash
+python demo_agent.py --load-state gameplay_sessions/session_20250404_180209/final_state.state
 ```
 
-### 2. State Processing
+Or load the latest autosave:
 
-The agent processes the game state received from the server, extracting relevant information like:
-- Player position
-- Current location
-- Dialog text
-- Party Pokemon
-- Inventory items
-
-### 3. Claude Integration
-
-The agent sends the game state to Claude AI to make intelligent decisions about what action to take next.
-
-```python
-# Prepare state for Claude
-content = [
-    {"type": "text", "text": "Here is the current state of the game:"},
-    {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": screenshot_b64}},
-    {"type": "text", "text": f"Location: {state['location']}"},
-    # ... other state information
-]
-
-# Get Claude's response
-response = client.messages.create(
-    model=model_name,
-    max_tokens=max_tokens,
-    system=SYSTEM_PROMPT,
-    messages=message_history,
-    temperature=temperature
-)
+```bash
+python demo_agent.py --load-autosave
 ```
 
-### 4. Action Execution
+### Session Continuation
 
-Based on Claude's analysis, the agent executes the appropriate action:
+To continue a previous gameplay session:
 
-```python
-# Extract tool calls from Claude's response
-tool_calls = extract_tool_calls(response.content)
-
-for tool_call in tool_calls:
-    if tool_call["name"] == "press_key":
-        state = agent.take_action("press_key", keys=[tool_call["parameters"]["button"]])
-    elif tool_call["name"] == "wait":
-        state = agent.take_action("wait", frames=tool_call["parameters"]["frames"])
+```bash
+python demo_agent.py --session session_20250404_180209
 ```
 
-## Customizing the Agent
+When you continue a session:
+- The system will automatically load the final state from the session
+- All game progress and scores will be preserved
+- New gameplay data will be appended to the existing record
 
-You can customize the agent by:
+## Implementation Details
 
-1. Modifying the `SYSTEM_PROMPT` to change the behavior and goals of Claude
-2. Implementing additional state processing logic
-3. Adding more sophisticated action selection logic
-4. Implementing domain-specific knowledge about Pokemon Red
+### Initialization
 
-## Example Code
+```python
+def initialize(self, headless: bool = False, sound: bool = False,
+              load_state_file: str = None, load_autosave: bool = False,
+              session_id: str = None):
+    """Initialize the environment."""
+    # Log when loading a state file or using session ID
+    if load_state_file:
+        logging.info(f"Loading state file: {load_state_file}")
+    if session_id:
+        logging.info(f"Using session ID: {session_id}")
+        
+    # Prepare initialization parameters
+    init_params = {
+        "headless": headless,
+        "sound": sound,
+        "load_state_file": load_state_file,
+        "load_autosave": load_autosave,
+        "session_id": session_id
+    }
+    
+    response = self.session.post(
+        f"{self.server_url}/initialize",
+        headers={"Content-Type": "application/json"},
+        json=init_params
+    )
+    self.current_state = response.json()
+```
 
-Here's an example of using the demo agent in your own code:
+### Decision Making
+
+The demo agent constructs messages for Claude that include:
+
+```python
+def decide_action(self, state):
+    """Decide the next action to take based on the current state."""
+    # Construct the content to be sent to Claude
+    content = [
+        human_message(f"You are an AI playing Pokémon Red. Here is the current game state:"),
+        human_message(f"Screenshot: [visual information from the game]"),
+        human_message(f"Location: {state['location']}"),
+        human_message(f"Coordinates: {state['coordinates']}"),
+        human_message(f"Party: {state['party']}"),
+        human_message(f"Score: {state.get('score', 0)}"),
+        human_message(f"Think about the current state and decide what action to take next. You have these actions available: {AVAILABLE_ACTIONS}"),
+    ]
+    
+    # Call Claude to get a decision
+    response = call_claude(content)
+    
+    # Parse the response and extract the action
+    # ...
+    
+    return action, params
+```
+
+### Execution Loop
+
+```python
+def run(self, max_steps=1000):
+    """Run the agent for a specified number of steps."""
+    self.initialize(headless=False, sound=True)
+    
+    for step in range(max_steps):
+        # Get the current state
+        state = self.current_state
+        
+        # Log information about the current state
+        logging.info(f"Step {step}: Location: {state['location']}, "
+                    f"Coords: {state['coordinates']}, "
+                    f"Party size: {len(state.get('party', []))}, "
+                    f"Score: {state.get('score', 0)}")
+        
+        # Decide what action to take
+        action, params = self.decide_action(state)
+        
+        # Execute the action
+        self.take_action(action, **params)
+        
+        # Check if we should continue
+        if not self.running:
+            break
+```
+
+## Example Usage
+
+Here's how to use the Demo Agent in your own code:
 
 ```python
 from demo_agent import AIServerAgent
 
 # Create the agent
-agent = AIServerAgent(
-    server_url="http://localhost:8000",
-    model_name="claude-3-7-sonnet-20250219",
-    temperature=0.7,
-    max_tokens=4000
+agent = AIServerAgent(server_url="http://localhost:8080")
+
+# Initialize with a specific saved state
+agent.initialize(
+    headless=False,
+    sound=True,
+    load_state_file="gameplay_sessions/session_20250404_180209/checkpoint_50.state"
 )
 
-# Initialize the environment
-state = agent.initialize(headless=False, sound=True)
+# Or continue from a previous session
+agent.initialize(
+    headless=False,
+    sound=True,
+    session_id="session_20250404_180209"
+)
 
-# Run for 50 steps
-agent.run(max_steps=50)
-
-# Stop the environment
-agent.stop()
+# Run the agent for 500 steps
+agent.run(max_steps=500)
 ```
+
+## Customization
+
+You can customize the Demo Agent by:
+
+1. **Modifying the system message**: Change the instructions given to Claude
+2. **Adding memory**: Implement a history of previous states and actions
+3. **Implementing specialized behavior**: Add specific strategies for different game phases
+4. **Improving state representation**: Add more details about the game state
 
 ## Troubleshooting
 
-- If you encounter connection errors, make sure the PokemonEval server is running
-- If Claude does not make the expected decisions, try adjusting the temperature or system prompt
-- If the agent gets stuck, try implementing more sophisticated recovery logic
+- If Claude doesn't make good decisions, try improving the state representation or system message
+- If actions aren't being executed correctly, check the parsing logic
+- If the agent gets stuck, implement a detection mechanism for repetitive states
+- If API rate limits are hit, add rate limiting or batching
+- If state loading fails, verify the state file path and format
 
 ## Next Steps
 
-Once you're familiar with the demo agent, consider:
-1. Implementing your own agent with more sophisticated gameplay strategies
-2. Adding performance metrics and evaluation
-3. Implementing reinforcement learning or other AI approaches
-4. Extending the agent to handle more complex game scenarios 
+After experimenting with the Demo Agent:
+
+1. Collect performance metrics and compare with human gameplay
+2. Implement more sophisticated decision-making algorithms
+3. Add reinforcement learning capabilities
+4. Train a more specialized agent for specific game tasks
+5. Develop a multi-agent system for collaborative play 
