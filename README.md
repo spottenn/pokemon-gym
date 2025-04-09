@@ -63,6 +63,77 @@ Options:
 - `--rom`: Path to the Pokemon ROM file (default: Pokemon_Red.gb)
 - `--log-file`: Custom CSV filename (optional)
 
+## Running Multiple AI Agents Simultaneously
+
+You can run multiple AI agents simultaneously using the provided bash script. This allows you to compare the performance of different AI models side by side.
+
+### ROM File Setup
+
+First, you need to prepare separate ROM files for each agent:
+
+1. Copy your Pokemon Red ROM file to create separate instances for each AI:
+```bash
+cp Pokemon_Red.gb Pokemon_Red_llama4.gb
+cp Pokemon_Red.gb Pokemon_Red_claude.gb
+cp Pokemon_Red.gb Pokemon_Red_openai.gb
+cp Pokemon_Red.gb Pokemon_Red_gemini.gb
+```
+
+### Set Required Environment Variables
+
+The script requires API keys for all supported AI providers:
+
+```bash
+export ANTHROPIC_API_KEY=your_anthropic_key_here
+export OPENAI_API_KEY=your_openai_key_here
+export OPENROUTER_API_KEY=your_openrouter_key_here
+export GOOGLE_API_KEY=your_google_key_here
+```
+
+### Running the Servers
+
+Start all AI agents with:
+
+```bash
+bash run_pokemon_servers.sh
+```
+
+This will start four separate emulation servers on different ports (8080-8083) and launch each AI agent connected to its respective server.
+
+### Command Options
+
+You can choose to run only specific AI agent combinations:
+
+```bash
+# Run only Llama 4
+bash run_pokemon_servers.sh --llama-only
+
+# Run only Claude
+bash run_pokemon_servers.sh --claude-only
+
+# Run only OpenAI
+bash run_pokemon_servers.sh --openai-only
+
+# Run only Gemini
+bash run_pokemon_servers.sh --gemini-only
+```
+
+The script will:
+1. Start each server on a dedicated port
+2. Wait for the server to initialize
+3. Launch the corresponding AI agent
+4. Save all process IDs for easy termination
+
+### Stopping the Servers
+
+To stop all servers and agents:
+
+```bash
+bash stop_pokemon_servers.sh
+```
+
+Or press Enter in the terminal where you started the servers.
+
 ## Playing as a Human
 
 You can play Pokemon Red yourself with keyboard controls:
@@ -186,6 +257,8 @@ The server provides the following API endpoints:
 - `GET /evaluate`: Get the current evaluation summary
 - `POST /save_state`: Save the current state to a file
 - `POST /load_state`: Load a state from a file
+
+## 
 
 ## Creating Your Own Agents
 
