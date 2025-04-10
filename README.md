@@ -64,7 +64,7 @@ PokemonGym is a platform that allows AI agents to play Pokemon Red through a ser
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/PokemonGym.git
+git clone https://github.com/benchflow-ai/pokemon-gym
 cd PokemonGym
 ```
 
