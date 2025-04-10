@@ -1,16 +1,26 @@
 # Core requirements
 anthropic>=0.39.0  # For Claude API
 pyboy==2.2.0       # For Pokemon emulator
+openai>=1.3.0      # For GPT-4o API
+google-generativeai>=0.3.0  # For Gemini API
 
 # Image processing
 Pillow             # For image manipulation
 numpy==1.24.4      # For array operations
+opencv-python>=4.8.0  # For video processing
+
+# Data analysis and visualization
+pandas>=2.0.0      # For data analysis
+matplotlib>=3.7.0  # For plotting
+cycler>=0.11.0     # For matplotlib color cycles
+tqdm>=4.66.0       # For progress bars
 
 # Server dependencies
 fastapi>=0.103.1   # For API server
 uvicorn>=0.23.2    # ASGI server for FastAPI
 requests>=2.31.0   # For HTTP client
 pydantic>=2.4.2    # For data validation
-pygame==2.6.1      # For game development
+pygame==2.6.1      # For game development and human agent
 
+# Benchmarking
 benchflow>=0.1.13  # For benchmark management

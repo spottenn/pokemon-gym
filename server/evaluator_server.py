@@ -17,7 +17,7 @@ from PIL import Image
 
 from pokemon_env import PokemonEnvironment
 from pokemon_env.action import Action, PressKey, Wait, ActionType
-from .evaluate import PokemonEvaluator  # Import the evaluator class
+from evaluator.evaluate import PokemonEvaluator  # Import the evaluator class
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
