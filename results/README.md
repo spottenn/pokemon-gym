@@ -10,26 +10,6 @@ The comparison shows how various LLM models (Claude-3.5-Sonnet, Claude-3.7-Sonne
 
 ![](comparison_plot.png)
 
-## Running Comparisons
-
-To generate your own comparison plots based on scoring events:
-
-```bash
-python compare_scores.py --files score_events_claude-3-5-sonnet.json score_events_claude-3-7-sonnet.json score_events_gpt-4o.json
-```
-
-Or use a directory with multiple score event files:
-
-```bash
-python compare_scores.py --dir . --pattern "score_events_*.json" --output my_comparison.png
-```
-
-Command-line options:
-- `--files`: List of score event JSON files to compare
-- `--dir`: Directory containing score event files
-- `--pattern`: File pattern to match (default: score_events_*.json)
-- `--output`: Output file name for the plot (default: comparison_plot.png)
-
 ## Data Access
 
 The complete trace data and gameplay logs can be downloaded from:
