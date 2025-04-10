@@ -1,10 +1,10 @@
 import argparse
 import logging
-import random
 import time
 from typing import Dict, List, Any, Optional
 import json
 import datetime
+import re
 
 import requests
 from PIL import Image
@@ -14,12 +14,14 @@ import copy
 import os
 from anthropic import Anthropic
 from openai import OpenAI
+import google.generativeai as genai
 
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
 
-SYSTEM_PROMPT = """You are playing Pokemon Red. You can see the game screen and control the game by executing emulator commands.
+# System prompts for different providers
+CLAUDE_SYSTEM_PROMPT = """You are playing Pokemon Red. You can see the game screen and control the game by executing emulator commands.
 
 Your goal is to play through Pokemon Red and eventually defeat the Elite Four. Make decisions based on what you see on the screen.
 
@@ -34,6 +36,36 @@ IMPORTANT: You can only take ONE action at a time. Choose the most appropriate s
 Before each action, explain your reasoning briefly, then use the appropriate tool to execute your chosen command.
 
 The conversation history may occasionally be summarized to save context space. If you see a message labeled "CONVERSATION HISTORY SUMMARY", this contains the key information about your progress so far. Use this information to maintain continuity in your gameplay."""
+
+OPENAI_SYSTEM_PROMPT = """You are playing Pokemon Red. You can see the game screen and control the game by deciding what button to press.
+
+Your goal is to play through Pokemon Red and eventually defeat the Elite Four. Make decisions based on what you see on the screen.
+
+You can control the game by clearly stating which button you want to press. For example:
+- "I'll press the A button to talk to this NPC"
+- "I should press UP to move toward the exit"
+- "Let me press B to cancel this menu"
+- "I need to press START to open the menu"
+- "I'll press DOWN to move to the next option"
+- "I should press SELECT to switch items"
+- "Let me wait 30 frames to let the animation finish"
+
+Available buttons are: A, B, START, SELECT, UP, DOWN, LEFT, RIGHT.
+You can also wait for a specified number of frames if needed.
+
+IMPORTANT: 
+1. You can only take ONE action at a time
+2. You must vary your actions based on the game state - don't just press A repeatedly
+3. Explore the game world by moving in different directions
+4. Be sure to read dialogue text and respond appropriately
+5. Plan your moves strategically to make progress in the game
+
+Before pressing a button, explain your reasoning briefly, then clearly state which button you'll press.
+
+The conversation history may occasionally be summarized to save context space. If you see a message labeled "CONVERSATION HISTORY SUMMARY", this contains the key information about your progress so far. Use this information to maintain continuity in your gameplay."""
+
+# Default system prompt (will be selected based on provider)
+SYSTEM_PROMPT = CLAUDE_SYSTEM_PROMPT
 
 # Available tools
 AVAILABLE_TOOLS = [
@@ -116,7 +148,7 @@ class AIServerAgent:
             if not api_key:
                 raise ValueError("ANTHROPIC_API_KEY environment variable not set")
             self.client = Anthropic(api_key=api_key)
-            self.model_name = model_name or "claude-3-5-sonnet-20240620"
+            self.model_name = model_name or "claude-3-5-sonnet-20241022"
             logger.info(f"Using Claude provider with model: {self.model_name}")
         elif self.provider == "openai":
             api_key = os.getenv("OPENAI_API_KEY")
@@ -139,11 +171,18 @@ class AIServerAgent:
             api_key = os.getenv("GOOGLE_API_KEY")
             if not api_key:
                 raise ValueError("GOOGLE_API_KEY environment variable not set")
-            self.client = OpenAI(
-                api_key=api_key,
-                base_url="https://generativelanguage.googleapis.com/v1beta/openai"
-            )
+            genai.configure(api_key=api_key)
             self.model_name = model_name or "gemini-2.5-pro-preview-03-25"
+            self.generation_config = {
+                "temperature": temperature,
+                "max_output_tokens": max_tokens,
+                "top_p": 0.95,
+            }
+            # Initialize the Gemini model
+            self.client = genai.GenerativeModel(
+                model_name=self.model_name,
+                generation_config=self.generation_config
+            )
             logger.info(f"Using Gemini provider with model: {self.model_name}")
         else:
             raise ValueError(f"Unsupported provider: {self.provider}. Choose 'claude', 'openai', 'openrouter', or 'gemini'")
@@ -410,13 +449,87 @@ class AIServerAgent:
                         return self.client.messages.create(
                             model=self.model_name,
                             max_tokens=self.max_tokens,
-                            system=SYSTEM_PROMPT,
+                            system=CLAUDE_SYSTEM_PROMPT,
                             messages=messages,
                             tools=AVAILABLE_TOOLS,
                             temperature=self.temperature,
                         )
+                elif self.provider == "gemini":
+                    # For Gemini, use google.generativeai package
+                    messages = kwargs.get('messages', self.message_history)
+                    
+                    # Convert to Gemini's chat format
+                    gemini_messages = []
+                    
+                    # First, add a system message if available
+                    system_prompt = CLAUDE_SYSTEM_PROMPT  # Use Claude's system prompt for Gemini
+                    if system_prompt:
+                        gemini_messages.append({"role": "user", "parts": [system_prompt]})
+                        gemini_messages.append({"role": "model", "parts": ["I understand and will follow these instructions."]})
+                    
+                    # Add conversation messages
+                    for msg in messages:
+                        role = "user" if msg["role"] == "user" else "model"
+                        
+                        if isinstance(msg["content"], list):
+                            # For multimodal content
+                            parts = []
+                            for item in msg["content"]:
+                                if isinstance(item, dict):
+                                    if item.get("type") == "text":
+                                        parts.append(item["text"])
+                                    elif item.get("type") == "image":
+                                        # Handle image content for Gemini
+                                        src = item["source"]
+                                        if src.get("type") == "base64":
+                                            # For Gemini, create image from base64
+                                            image_data = base64.b64decode(src["data"])
+                                            img = Image.open(io.BytesIO(image_data))
+                                            parts.append(img)
+                                    elif item.get("type") == "image_url":
+                                        # Handle OpenAI-style image URLs
+                                        image_url = item["image_url"]["url"]
+                                        if image_url.startswith("data:"):
+                                            # Extract base64 data from data URL
+                                            _, base64_data = image_url.split(",", 1)
+                                            image_data = base64.b64decode(base64_data)
+                                            img = Image.open(io.BytesIO(image_data))
+                                            parts.append(img)
+                            gemini_messages.append({"role": role, "parts": parts})
+                        else:
+                            # For simple text content
+                            gemini_messages.append({"role": role, "parts": [msg["content"]]})
+                    
+                    # For debugging
+                    if logger.isEnabledFor(logging.DEBUG):
+                        logger.debug(f"Gemini messages: {[(m['role'], len(m['parts'])) for m in gemini_messages]}")
+                    
+                    # Start a chat session and get response
+                    chat = self.client.start_chat(history=gemini_messages[:-1] if gemini_messages else [])
+                    response = chat.send_message(
+                        gemini_messages[-1]["parts"] if gemini_messages else "Hello",
+                    )
+                    
+                    # Create response object similar to OpenAI for compatibility
+                    text_response = response.text
+                    
+                    # Create a custom response object with structure similar to OpenAI for compatibility
+                    custom_response = type('obj', (object,), {
+                        'choices': [
+                            type('obj', (object,), {
+                                'message': type('obj', (object,), {
+                                    'content': text_response,
+                                    'tool_calls': []  # Empty tool calls since we handle functions differently
+                                })
+                            })
+                        ],
+                        'text': text_response,  # For compatibility
+                        'model_name': self.model_name,  # For logging
+                    })
+                    
+                    return custom_response
                 else:
-                    # For OpenAI, OpenRouter and Gemini, use OpenAI compatible API
+                    # For OpenAI, OpenRouter, use OpenAI compatible API
                     # Extract important params from kwargs
                     messages = kwargs.get('messages', self.message_history)
                     
@@ -424,8 +537,11 @@ class AIServerAgent:
                     # This ensures we only keep the most relevant tool responses
                     cleaned_messages = self._clean_message_history(messages)
                     
+                    # Select appropriate system prompt based on provider
+                    system_prompt = OPENAI_SYSTEM_PROMPT if self.provider in ["openai", "openrouter"] else CLAUDE_SYSTEM_PROMPT
+                    
                     # Convert to OpenAI format if needed
-                    openai_messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+                    openai_messages = [{"role": "system", "content": system_prompt}]
                     
                     for msg in cleaned_messages:
                         if msg["role"] == "user" and isinstance(msg["content"], list):
@@ -453,66 +569,65 @@ class AIServerAgent:
                             for item in msg["content"]:
                                 if isinstance(item, dict) and item.get("type") == "text":
                                     text_content += item.get("text", "") + "\n"
+                                # Convert tool uses to text descriptions for OpenAI
+                                elif isinstance(item, dict) and item.get("type") == "tool_use":
+                                    tool_name = item.get("name", "unknown")
+                                    tool_input = item.get("input", {})
+                                    if tool_name == "press_key" and "button" in tool_input:
+                                        text_content += f"I'll press the {tool_input['button']} button.\n"
+                                    elif tool_name == "wait" and "frames" in tool_input:
+                                        text_content += f"I'll wait for {tool_input['frames']} frames.\n"
                             if text_content:
                                 openai_messages.append({"role": "assistant", "content": text_content})
-                        elif msg["role"] == "assistant" and "tool_calls" in msg:
-                            # Handle assistant message with tool_calls
-                            assistant_msg = {"role": "assistant", "content": msg.get("content", "")}
-                            # Crucial: preserve tool_calls for proper chain
-                            if "tool_calls" in msg:
-                                assistant_msg["tool_calls"] = msg["tool_calls"]
-                            openai_messages.append(assistant_msg)
-                        elif msg["role"] == "tool":
-                            # Ensure the tool response message contains the necessary fields
-                            tool_msg = {
-                                "role": "tool",
-                                "tool_call_id": msg.get("tool_call_id"),
-                                "content": msg.get("content", "")
-                            }
-                            # For Gemini, the name field is required
-                            if self.provider == "gemini":
-                                if "name" in msg:
-                                    tool_msg["name"] = msg["name"]
-                                    logger.info(f"Using provided tool name: {msg['name']}")
-                                else:
-                                    # If no name field is provided, use a default value
-                                    tool_msg["name"] = "press_key" if "button" in msg.get("content", "") else "wait"
-                                    logger.info(f"Using default tool name: {tool_msg['name']}")
-                            elif "name" in msg:
-                                tool_msg["name"] = msg["name"]
-                            
-                            logger.info(f"Tool message for {self.provider}: {tool_msg}")
-                            openai_messages.append(tool_msg)
                         else:
-                            # Simple text messages or other roles
-                            openai_messages.append(msg)
-                    
-                    # For Gemini, log the complete message history
-                    if self.provider == "gemini" and logger.isEnabledFor(logging.DEBUG):
-                        logger.debug(f"OpenAI messages for Gemini: {json.dumps(openai_messages, indent=2)}")
+                            # Simple text messages
+                            if msg["role"] in ["user", "assistant", "system"]:
+                                # Skip tool messages, convert assistant tool_calls to plain text
+                                if msg["role"] == "assistant" and "tool_calls" in msg:
+                                    # Convert tool calls to text
+                                    text_content = msg.get("content", "") or ""
+                                    # Add text descriptions of each tool call
+                                    for tc in msg.get("tool_calls", []):
+                                        if isinstance(tc, dict) and "function" in tc:
+                                            func = tc["function"]
+                                            if "name" in func and "arguments" in func:
+                                                try:
+                                                    args = json.loads(func["arguments"])
+                                                    if func["name"] == "press_key" and "button" in args:
+                                                        text_content += f"I'll press the {args['button']} button.\n"
+                                                    elif func["name"] == "wait" and "frames" in args:
+                                                        text_content += f"I'll wait for {args['frames']} frames.\n"
+                                                except:
+                                                    pass
+                                    openai_messages.append({"role": "assistant", "content": text_content})
+                                elif msg["role"] != "tool":  # Skip tool messages entirely
+                                    openai_messages.append(msg)
                     
                     # For OpenAI, log message history for debugging
-                    if (self.provider == "openai" or self.provider == "openrouter") and logger.isEnabledFor(logging.DEBUG):
+                    if logger.isEnabledFor(logging.DEBUG):
                         logger.debug(f"Messages for {self.provider}: {json.dumps(openai_messages, indent=2)}")
                     
-                    # Convert Claude tools to OpenAI function format
-                    openai_tools = []
-                    for tool in AVAILABLE_TOOLS:
-                        openai_tools.append({
-                            "type": "function",
-                            "function": {
-                                "name": tool["name"],
-                                "description": tool["description"],
-                                "parameters": tool["input_schema"]
-                            }
-                        })
+                    # For OpenAI, we'll use text mode instead of tools
+                    tools = []
+                    if self.provider != "openai" and self.provider != "openrouter":
+                        # Only add tools for non-OpenAI providers
+                        tools = []
+                        for tool in AVAILABLE_TOOLS:
+                            tools.append({
+                                "type": "function",
+                                "function": {
+                                    "name": tool["name"],
+                                    "description": tool["description"],
+                                    "parameters": tool["input_schema"]
+                                }
+                            })
                     
                     # Call OpenAI compatible API
                     return self.client.chat.completions.create(
                         model=self.model_name,
                         max_tokens=self.max_tokens,
                         messages=openai_messages,
-                        tools=openai_tools,
+                        tools=tools if tools else None,
                         temperature=self.temperature,
                     )
                     
@@ -527,6 +642,97 @@ class AIServerAgent:
         logger.error(f"API call failed after {self.max_retries} attempts: {last_exception}")
         raise last_exception
     
+    def _extract_action_from_text(self, text):
+        """
+        Extract action from text response for OpenAI text-only mode
+        
+        Args:
+            text: The text response from OpenAI
+            
+        Returns:
+            Action data dictionary
+        """
+        # Convert to lowercase for easier matching
+        text_lower = text.lower()
+        
+        # Default action if nothing is found
+        action_data = {"action_type": "press_key", "button": "a", "reason": "Default action"}
+        
+        # Enhanced pattern matching for button presses
+        # Direct button mentions
+        button_patterns = {
+            # A button patterns
+            r'\b(?:press|use|hit|push|click)(?:\s+the)?(?:\s+|\s*[":,-]\s*)a\s+button': "a",
+            r'\bi(?:\'|_| am|\'ll| will| should| need to)(?:\s+|\s*[":,-]\s*)press(?:\s+the)?(?:\s+|\s*[":,-]\s*)a\s+button': "a",
+            r'\bpressing(?:\s+the)?(?:\s+|\s*[":,-]\s*)a\s+button': "a",
+            r'\bpress(?:\s+|\s*[":,-]\s*)a\b': "a",
+            r'\bbutton(?:\s+|\s*[":,-]\s*)a\b': "a",
+            
+            # B button patterns
+            r'\b(?:press|use|hit|push|click)(?:\s+the)?(?:\s+|\s*[":,-]\s*)b\s+button': "b",
+            r'\bi(?:\'|_| am|\'ll| will| should| need to)(?:\s+|\s*[":,-]\s*)press(?:\s+the)?(?:\s+|\s*[":,-]\s*)b\s+button': "b",
+            r'\bpressing(?:\s+the)?(?:\s+|\s*[":,-]\s*)b\s+button': "b",
+            r'\bpress(?:\s+|\s*[":,-]\s*)b\b': "b",
+            r'\bbutton(?:\s+|\s*[":,-]\s*)b\b': "b",
+            r'\bcancel': "b",  # Often B is used to cancel
+            
+            # Directional buttons
+            r'\b(?:press|use|hit|push|click|move)(?:\s+|\s*[":,-]\s*)(?:the\s+)?up(?:\s+button)?': "up",
+            r'\b(?:press|use|hit|push|click|move)(?:\s+|\s*[":,-]\s*)(?:the\s+)?down(?:\s+button)?': "down",
+            r'\b(?:press|use|hit|push|click|move)(?:\s+|\s*[":,-]\s*)(?:the\s+)?left(?:\s+button)?': "left",
+            r'\b(?:press|use|hit|push|click|move)(?:\s+|\s*[":,-]\s*)(?:the\s+)?right(?:\s+button)?': "right",
+            r'\bi(?:\'|_| am|\'ll| will| should| need to)(?:\s+|\s*[":,-]\s*)(?:go|head|move|walk)(?:\s+|\s*[":,-]\s*)up': "up",
+            r'\bi(?:\'|_| am|\'ll| will| should| need to)(?:\s+|\s*[":,-]\s*)(?:go|head|move|walk)(?:\s+|\s*[":,-]\s*)down': "down",
+            r'\bi(?:\'|_| am|\'ll| will| should| need to)(?:\s+|\s*[":,-]\s*)(?:go|head|move|walk)(?:\s+|\s*[":,-]\s*)left': "left",
+            r'\bi(?:\'|_| am|\'ll| will| should| need to)(?:\s+|\s*[":,-]\s*)(?:go|head|move|walk)(?:\s+|\s*[":,-]\s*)right': "right",
+            
+            # Start and Select
+            r'\b(?:press|use|hit|push|click)(?:\s+|\s*[":,-]\s*)(?:the\s+)?start(?:\s+button)?': "start",
+            r'\b(?:press|use|hit|push|click)(?:\s+|\s*[":,-]\s*)(?:the\s+)?select(?:\s+button)?': "select",
+            r'\b(?:open|access)(?:\s+|\s*[":,-]\s*)(?:the\s+)?menu': "start",  # Often Start is used to open menu
+        }
+        
+        # Use regex to find patterns in the text
+        for pattern, button in button_patterns.items():
+            if re.search(pattern, text_lower):
+                logger.info(f"Matched pattern '{pattern}' to button '{button}'")
+                return {"action_type": "press_key", "button": button}
+        
+        # Check for general movement or navigation terms if no specific button was found
+        # Only consider these if the more specific patterns above didn't match
+        if "move" in text_lower or "walk" in text_lower or "go" in text_lower or "navigate" in text_lower:
+            # Look for directions
+            if "up" in text_lower or "north" in text_lower:
+                return {"action_type": "press_key", "button": "up"}
+            elif "down" in text_lower or "south" in text_lower:
+                return {"action_type": "press_key", "button": "down"}
+            elif "left" in text_lower or "west" in text_lower:
+                return {"action_type": "press_key", "button": "left"}
+            elif "right" in text_lower or "east" in text_lower:
+                return {"action_type": "press_key", "button": "right"}
+        
+        # Check for dialog or menu interaction
+        if "talk" in text_lower or "speak" in text_lower or "interact" in text_lower or "confirm" in text_lower or "select" in text_lower:
+            return {"action_type": "press_key", "button": "a"}
+        
+        # Check for wait instructions
+        if "wait" in text_lower:
+            # Try to extract number of frames
+            frame_matches = re.findall(r'wait (?:for )?(\d+) frames?', text_lower)
+            if frame_matches:
+                try:
+                    frames = int(frame_matches[0])
+                    return {"action_type": "wait", "frames": frames}
+                except:
+                    pass
+            
+            # Default wait if no specific frames mentioned
+            return {"action_type": "wait", "frames": 30}
+        
+        # Log that we're using default action
+        logger.info(f"No action pattern found in text: '{text[:100]}...' - using default action")
+        return action_data
+
     def _clean_message_history(self, messages):
         """
         Completely clean message history to avoid accumulation.
@@ -544,6 +750,56 @@ class AIServerAgent:
             
         cleaned = []
         
+        # Select the appropriate system prompt based on provider
+        system_prompt = OPENAI_SYSTEM_PROMPT if self.provider in ["openai", "openrouter"] else CLAUDE_SYSTEM_PROMPT
+        
+        # Keep system message if present
+        for msg in messages:
+            if msg["role"] == "system":
+                cleaned.append({"role": "system", "content": system_prompt})
+                break
+        
+        # Add a default system message if none was found
+        if not cleaned:
+            cleaned.append({"role": "system", "content": system_prompt})
+        
+        # For OpenAI/OpenRouter, simplify to basic chat history without tools
+        if self.provider == "openai" or self.provider == "openrouter":
+            # Find the last 10 messages that are either user or assistant (no tools)
+            recent_messages = []
+            for msg in messages:
+                if msg["role"] in ["user", "assistant"]:
+                    # Skip any message with tool_calls
+                    if msg["role"] == "assistant" and "tool_calls" in msg:
+                        # Convert tool_calls to text
+                        text_content = msg.get("content", "") or ""
+                        # Add text descriptions of each tool call
+                        for tc in msg.get("tool_calls", []):
+                            if isinstance(tc, dict) and "function" in tc:
+                                func = tc["function"]
+                                if "name" in func and "arguments" in func:
+                                    try:
+                                        args = json.loads(func["arguments"])
+                                        if func["name"] == "press_key" and "button" in args:
+                                            text_content += f"I'll press the {args['button']} button.\n"
+                                        elif func["name"] == "wait" and "frames" in args:
+                                            text_content += f"I'll wait for {args['frames']} frames.\n"
+                                    except:
+                                        pass
+                        if text_content:
+                            recent_messages.append({"role": "assistant", "content": text_content})
+                    else:
+                        recent_messages.append(msg)
+            
+            # Keep only the last 10 messages
+            if len(recent_messages) > 10:
+                recent_messages = recent_messages[-10:]
+            
+            # Add recent messages to cleaned list
+            cleaned.extend(recent_messages)
+            return cleaned
+        
+        # For Claude and other providers, use existing logic
         # Find the last sent user message
         last_user_msg = None
         for i in range(len(messages) - 1, -1, -1):
@@ -551,11 +807,11 @@ class AIServerAgent:
                 last_user_msg = messages[i]
                 break
         
-        # If a user message is found, only keep it
+        # If a user message is found, add it
         if last_user_msg:
             cleaned.append(last_user_msg)
             
-            # Find possible tool calls and responses
+            # For other providers, find possible tool calls and responses
             # Only keep the last tool call and response (if exists)
             for i in range(len(messages) - 1, -1, -1):
                 # Find assistant messages with tool calls
@@ -578,10 +834,6 @@ class AIServerAgent:
                     
                     # Process tool chain only once
                     break
-        
-        # If no message is found (extreme case), return the last message of the original list (if exists)
-        if not cleaned and messages:
-            return [messages[-1]]
             
         return cleaned
     
@@ -662,6 +914,9 @@ class AIServerAgent:
                     tools=AVAILABLE_TOOLS,
                     temperature=self.temperature,
                 )
+            elif self.provider == "gemini":
+                # Use Gemini API call
+                response = self._call_api_with_retry()
             else:
                 # Use OpenAI-compatible call with _call_api_with_retry without args
                 response = self._call_api_with_retry()
@@ -720,32 +975,53 @@ class AIServerAgent:
         
         if self.provider == "claude":
             # Process Claude response (keep original format)
-            tool_calls = [block for block in response.content if block.type == "tool_use"]
+            tool_calls = [block for block in response.content if hasattr(block, 'type') and block.type == "tool_use"]
             
             # Collect Claude's response
             for block in response.content:
-                if block.type == "text":
-                    logger.info(f"[Claude] {block.text}")
-                    assistant_content.append({"type": "text", "text": block.text})
-                elif block.type == "tool_use":
-                    logger.info(f"[Claude] Using tool: {block.name}")
-                    assistant_content.append({"type": "tool_use", **dict(block)})
+                if hasattr(block, 'type'):
+                    if block.type == "text":
+                        logger.info(f"[Claude] {block.text}")
+                        assistant_content.append({"type": "text", "text": block.text})
+                    elif block.type == "tool_use":
+                        logger.info(f"[Claude] Using tool: {block.name if hasattr(block, 'name') else 'unknown'}")
+                        assistant_content.append({"type": "tool_use", **dict(block)})
             
             # Prepare action data
             if tool_calls:
                 tool_call = tool_calls[0]
-                tool_name = tool_call.name
-                tool_input = tool_call.input
+                tool_name = tool_call.name if hasattr(tool_call, 'name') else None
+                tool_input = tool_call.input if hasattr(tool_call, 'input') else {}
+                tool_id = tool_call.id if hasattr(tool_call, 'id') else None
                 
                 if tool_name == "press_key":
-                    button = tool_input.get("button")
-                    action_data = {"action_type": "press_key", "button": button, "tool_id": tool_call.id}
+                    button = tool_input.get("button") if isinstance(tool_input, dict) else None
+                    action_data = {"action_type": "press_key", "button": button, "tool_id": tool_id}
                 elif tool_name == "wait":
-                    frames = tool_input.get("frames")
-                    action_data = {"action_type": "wait", "frames": frames, "tool_id": tool_call.id}
+                    frames = tool_input.get("frames") if isinstance(tool_input, dict) else None
+                    action_data = {"action_type": "wait", "frames": frames, "tool_id": tool_id}
             else:
                 # Default action if no tool call
                 action_data = {"action_type": "press_key", "button": "a", "reason": "No tool call found"}
+        elif self.provider == "gemini":
+            # Gemini handling is similar to OpenAI/OpenRouter but with specific adaptations
+            if hasattr(response, 'choices') and response.choices:
+                message = response.choices[0].message
+                
+                # Get text content
+                if message.content:
+                    logger.info(f"[{self.provider}] {message.content}")
+                    assistant_content = message.content
+                    
+                    # For Gemini, parse the text response to determine action
+                    action_data = self._extract_action_from_text(message.content)
+                    
+                # No tool calls support through Gemini right now, just use text parsing
+                if not action_data:
+                    action_data = {"action_type": "press_key", "button": "a", "reason": "No valid action found in text"}
+            else:
+                # Malformed response, default action
+                action_data = {"action_type": "press_key", "button": "a", "reason": "Malformed response"}
         else:
             # Process OpenAI-compatible response (OpenRouter or Gemini)
             if hasattr(response, 'choices') and response.choices:
@@ -755,21 +1031,29 @@ class AIServerAgent:
                 if message.content:
                     logger.info(f"[{self.provider}] {message.content}")
                     assistant_content = message.content
-                
-                # Extract tool calls if present
-                if hasattr(message, 'tool_calls') and message.tool_calls:
+                    
+                    # For OpenAI, parse the text response to determine action
+                    # Look for keywords indicating button presses or wait actions
+                    action_data = self._extract_action_from_text(message.content)
+                    
+                # Extract tool calls if present - only used for non-OpenAI providers
+                if self.provider != "openai" and self.provider != "openrouter" and hasattr(message, 'tool_calls') and message.tool_calls:
                     # Log all tool calls
                     if len(message.tool_calls) > 1:
                         logger.info(f"[{self.provider}] Multiple tool calls detected: {len(message.tool_calls)}")
                         for idx, tc in enumerate(message.tool_calls):
-                            logger.info(f"Tool call {idx+1}: {tc.function.name}")
+                            # Safe access to function name
+                            function_name = tc.function.name if hasattr(tc, 'function') and hasattr(tc.function, 'name') else tc.get('function', {}).get('name')
+                            logger.info(f"Tool call {idx+1}: {function_name}")
                     
                     # Process tool calls (may be multiple with OpenRouter)
                     tool_call = None
                     
                     # Try to find a 'press_key' or 'wait' tool call as they are higher priority
                     for tc in message.tool_calls:
-                        if tc.function.name in ["press_key", "wait"]:
+                        # Safe access to function name
+                        function_name = tc.function.name if hasattr(tc, 'function') and hasattr(tc.function, 'name') else tc.get('function', {}).get('name')
+                        if function_name in ["press_key", "wait"]:
                             tool_call = tc
                             break
                     
@@ -778,26 +1062,35 @@ class AIServerAgent:
                         tool_call = message.tool_calls[0]
                     
                     if tool_call:
-                        logger.info(f"[{self.provider}] Selected tool call: {tool_call.function.name}")
+                        # Safe access to function name
+                        function_name = tool_call.function.name if hasattr(tool_call, 'function') and hasattr(tool_call.function, 'name') else tool_call.get('function', {}).get('name')
+                        logger.info(f"[{self.provider}] Selected tool call: {function_name}")
                         
                         try:
+                            # Safe access to function arguments
+                            function_args = tool_call.function.arguments if hasattr(tool_call, 'function') and hasattr(tool_call.function, 'arguments') else tool_call.get('function', {}).get('arguments')
+                            
                             # Parse args
-                            args = json.loads(tool_call.function.arguments)
+                            args = json.loads(function_args)
+                            
+                            # Safe access to tool call ID
+                            tool_id = tool_call.id if hasattr(tool_call, 'id') else tool_call.get('id')
                             
                             # Extract action
-                            if tool_call.function.name == "press_key":
+                            if function_name == "press_key":
                                 button = args.get("button")
                                 if button:
-                                    action_data = {"action_type": "press_key", "button": button, "tool_id": tool_call.id}
-                            elif tool_call.function.name == "wait":
+                                    action_data = {"action_type": "press_key", "button": button, "tool_id": tool_id}
+                            elif function_name == "wait":
                                 frames = args.get("frames")
                                 if frames:
-                                    action_data = {"action_type": "wait", "frames": frames, "tool_id": tool_call.id}
+                                    action_data = {"action_type": "wait", "frames": frames, "tool_id": tool_id}
                             
                             # Log selected action
                             logger.info(f"Selected action: {action_data}")
                         except json.JSONDecodeError:
-                            logger.error(f"Failed to parse tool arguments: {tool_call.function.arguments}")
+                            function_args = tool_call.function.arguments if hasattr(tool_call, 'function') and hasattr(tool_call.function, 'arguments') else tool_call.get('function', {}).get('arguments')
+                            logger.error(f"Failed to parse tool arguments: {function_args}")
                 
                 # Default action if no valid tool call found
                 if not action_data:
@@ -861,150 +1154,77 @@ class AIServerAgent:
             
             # Add tool result response to history
             self.message_history.append({"role": "user", "content": tool_result_content})
-        else:
-            # OpenAI format (text content)
-            self.message_history.append({"role": "assistant", "content": assistant_content})
+        elif self.provider == "gemini":
+            # Gemini may have special requirements for message history format
+            logger.info(f"Gemini: Adding result directly to user message")
             
-            # Add tool result if tool was used (OpenAI format)
-            if "tool_id" in action_data:
-                if action_data["action_type"] == "press_key":
-                    result_message = f"Button '{action_data['button']}' pressed successfully. New location: {next_state['location']}, Coordinates: {next_state['coordinates']}"
-                elif action_data["action_type"] == "wait":
-                    result_message = f"Waited for {action_data['frames']} frames. New location: {next_state['location']}, Coordinates: {next_state['coordinates']}"
-                else:
-                    result_message = f"Action executed. New location: {next_state['location']}, Coordinates: {next_state['coordinates']}"
-                
-                # Special handling for Gemini provider
-                if self.provider == "gemini":
-                    # Gemini may have special requirements for tool response format, skip tool response
-                    logger.info(f"Gemini: Skipping tool response, adding result directly to user message")
-                    # Directly add next user message with result and new image
-                    self.message_history.append({
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": f"{result_message}\nCurrent location: {next_state['location']}, Coordinates: {next_state['coordinates']}"},
-                            {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{next_state['screenshot_base64']}"}}
-                        ]
-                    })
-                elif self.provider == "openai" or self.provider == "openrouter":
-                    # For OpenAI/OpenRouter: tool messages must be responses to preceding messages with 'tool_calls'
-                    # We need to add the tool message as a direct response to the assistant message
-                    logger.info(f"{self.provider}: Adding tool response as a direct response to tool_calls")
-                    
-                    # Completely solve message accumulation issue: use new history method
-                    # Only keep system role messages and recent user messages, delete all old assistant and tool messages
-                    
-                    # 1. Find the last user message
-                    last_user_msg = None
-                    for i in range(len(self.message_history) - 1, -1, -1):
-                        if self.message_history[i]["role"] == "user":
-                            last_user_msg = self.message_history[i]
-                            break
-                    
-                    # 2. Clear history, only keep last user message
-                    if last_user_msg:
-                        new_history = [last_user_msg]
-                        self.message_history = new_history
-                    else:
-                        # If no user message is found, clear history
-                        self.message_history = []
-                    
-                    # 3. Add assistant message with tool calls - key fix: ensure correct tool_calls format
-                    tool_calls_data = []
-                    
-                    # Find the current tool call being used
-                    for tc in message.tool_calls:
-                        # Check if tc is a dictionary or an object and access properties accordingly
-                        tc_id = tc.id if hasattr(tc, 'id') else tc.get('id')
-                        
-                        if tc_id == action_data["tool_id"]:
-                            # Create standardized format that meets OpenAI requirements
-                            tool_call_obj = {
-                                "id": tc_id,
-                                "type": "function",
-                                "function": {
-                                    "name": tc.function.name if hasattr(tc, 'function') else tc["function"]["name"],
-                                    "arguments": tc.function.arguments if hasattr(tc, 'function') else tc["function"]["arguments"]
-                                }
-                            }
-                            tool_calls_data.append(tool_call_obj)
-                            break
-                    
-                    # Make sure we found the tool call
-                    if not tool_calls_data:
-                        logger.warning(f"Could not find matching tool call with ID {action_data['tool_id']}")
-                        # Add all tool calls as a fallback
-                        for tc in message.tool_calls:
-                            # Access properties based on object type
-                            tc_id = tc.id if hasattr(tc, 'id') else tc.get('id')
-                            
-                            if tc_id:  # Only add if we have a valid ID
-                                tool_call_obj = {
-                                    "id": tc_id,
-                                    "type": "function",
-                                    "function": {
-                                        "name": tc.function.name if hasattr(tc, 'function') else tc["function"]["name"],
-                                        "arguments": tc.function.arguments if hasattr(tc, 'function') else tc["function"]["arguments"]
-                                    }
-                                }
-                                tool_calls_data.append(tool_call_obj)
-                    
-                    # Add assistant message with standardized tool_calls format
-                    assistant_msg = {
-                        "role": "assistant", 
-                        "content": assistant_content
+            # Add assistant's response as plain text
+            self.message_history.append({
+                "role": "assistant",
+                "content": assistant_content
+            })
+            
+            # Create result message
+            if action_data["action_type"] == "press_key":
+                result_message = f"Button '{action_data['button']}' pressed successfully. New location: {next_state['location']}, Coordinates: {next_state['coordinates']}"
+            elif action_data["action_type"] == "wait":
+                result_message = f"Waited for {action_data['frames']} frames. New location: {next_state['location']}, Coordinates: {next_state['coordinates']}"
+            else:
+                result_message = f"Action executed. New location: {next_state['location']}, Coordinates: {next_state['coordinates']}"
+            
+            # Add result as user message with new image
+            # Prepare image for Gemini
+            new_user_msg = {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": f"Result: {result_message}\nCurrent location: {next_state['location']}, Coordinates: {next_state['coordinates']}"},
+                    {
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": "image/png",
+                            "data": next_state['screenshot_base64']
+                        }
                     }
-                    
-                    # Only add tool_calls field when we have tool call data
-                    if tool_calls_data:
-                        assistant_msg["tool_calls"] = tool_calls_data
-                        
-                    self.message_history.append(assistant_msg)
-                    
-                    # 4. Add single tool response message
-                    tool_result = {
-                        "role": "tool",
-                        "tool_call_id": action_data["tool_id"],
-                        "content": result_message
-                    }
-                    self.message_history.append(tool_result)
-                    
-                    # 5. Add new user message with result and new image
-                    new_user_msg = {
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": f"Current location: {next_state['location']}, Coordinates: {next_state['coordinates']}"},
-                            {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{next_state['screenshot_base64']}"}}
-                        ]
-                    }
-                    self.message_history.append(new_user_msg)
-                    
-                    # 6. Record detailed log for debugging
-                    logger.info(f"Reset message history. Current size: {len(self.message_history)} messages")
-                    logger.info(f"Message roles: {[msg['role'] for msg in self.message_history]}")
-                    
-                    # 7. Output full message history for debugging (only in DEBUG level)
-                    if logger.isEnabledFor(logging.DEBUG):
-                        debug_history = []
-                        for msg in self.message_history:
-                            msg_copy = msg.copy()
-                            # Avoid including large base64 images in log
-                            if msg["role"] == "user" and isinstance(msg["content"], list):
-                                for item in msg_copy["content"]:
-                                    if item.get("type") == "image_url" and "image_url" in item:
-                                        item["image_url"]["url"] = "[BASE64_IMAGE]"
-                            debug_history.append(msg_copy)
-                        logger.debug(f"Full message history: {json.dumps(debug_history, indent=2)}")
-                else:
-                    # No tool call, just add assistant response and new game state/screenshot
-                    self.message_history.append({"role": "assistant", "content": assistant_content})
-                    self.message_history.append({
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": f"Current location: {next_state['location']}, Coordinates: {next_state['coordinates']}"},
-                            {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{next_state['screenshot_base64']}"}}
-                        ]
-                    })
+                ]
+            }
+            self.message_history.append(new_user_msg)
+            
+            # For debugging
+            logger.info(f"Message history size: {len(self.message_history)} messages")
+            roles = [msg["role"] for msg in self.message_history]
+            logger.info(f"Message roles: {roles}")
+        elif self.provider == "openai" or self.provider == "openrouter":
+            # Add assistant's response as plain text
+            self.message_history.append({
+                "role": "assistant",
+                "content": assistant_content
+            })
+            
+            # Add result as user message with new image
+            new_user_msg = {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": f"Result: {result_message}\nCurrent location: {next_state['location']}, Coordinates: {next_state['coordinates']}"},
+                    {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{next_state['screenshot_base64']}"}}
+                ]
+            }
+            self.message_history.append(new_user_msg)
+            
+            # For debugging
+            logger.info(f"Message history size: {len(self.message_history)} messages")
+            roles = [msg["role"] for msg in self.message_history]
+            logger.info(f"Message roles: {roles}")
+        else:
+            # No tool call, just add assistant response and new game state/screenshot
+            self.message_history.append({"role": "assistant", "content": assistant_content})
+            self.message_history.append({
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": f"Current location: {next_state['location']}, Coordinates: {next_state['coordinates']}"},
+                    {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{next_state['screenshot_base64']}"}}
+                ]
+            })
         
         # Check if history needs summarization
         if len(self.message_history) > self.max_history:
@@ -1042,7 +1262,39 @@ class AIServerAgent:
                 )
                 
                 # Extract summary text
-                summary_text = " ".join([block.text for block in response.content if block.type == "text"])
+                summary_text = " ".join([
+                    block.text for block in response.content 
+                    if hasattr(block, 'type') and block.type == "text" and hasattr(block, 'text')
+                ])
+            elif self.provider == "gemini":
+                # Gemini-specific summarization
+                # Simplify history for summarization request
+                simplified_messages = []
+                for msg in self.message_history:
+                    if msg["role"] in ["user", "assistant"]:
+                        if isinstance(msg["content"], list):
+                            # Extract text from content blocks
+                            text_parts = []
+                            for item in msg["content"]:
+                                if isinstance(item, dict) and item.get("type") == "text":
+                                    text_parts.append(item.get("text", ""))
+                            if text_parts:
+                                simplified_messages.append({"role": msg["role"], "content": "\n".join(text_parts)})
+                        else:
+                            # Already text content
+                            simplified_messages.append({"role": msg["role"], "content": msg["content"]})
+                
+                # Add summary request
+                simplified_messages.append({
+                    "role": "user", 
+                    "content": "Please create a detailed summary of our conversation history so far. This summary will replace the full conversation history to manage the context window."
+                })
+                
+                # Get summary using Gemini API
+                response = self._call_api_with_retry(messages=simplified_messages)
+                
+                # Extract summary text from Gemini response
+                summary_text = response.choices[0].message.content if hasattr(response, 'choices') else response.text
             else:
                 # OpenAI-compatible summarization
                 # Simplify history for summarization request
@@ -1102,6 +1354,14 @@ class AIServerAgent:
                                 "text": "You may now continue playing Pokemon Red. Make your next decision based on the current game state."
                             }
                         ]
+                    }
+                ] + recent_msgs
+            elif self.provider == "gemini":
+                # Gemini format (similar to OpenAI)
+                self.message_history = [
+                    {
+                        "role": "user",
+                        "content": f"CONVERSATION HISTORY SUMMARY: {summary_text}\n\nYou may now continue playing Pokemon Red. Make your next decision based on the current game state."
                     }
                 ] + recent_msgs
             else:
