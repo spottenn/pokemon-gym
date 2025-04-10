@@ -1,4 +1,4 @@
-# PokemonEval Results
+# PokemonGym Results
 
 This directory contains evaluation results comparing different LLM agents playing Pokemon Red.
 

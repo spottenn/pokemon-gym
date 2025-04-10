@@ -1,13 +1,13 @@
-# PokemonEval Agents
+# PokemonGym Agents
 
-This directory contains agents for interacting with the PokemonEval framework:
+This directory contains agents for interacting with the PokemonGym framework:
 
 - **Demo Agent**: An AI agent powered by Claude that can play Pokemon Red autonomously
 - **Human Agent**: A pygame interface that allows humans to play Pokemon Red
 
 ## Installation
 
-Make sure you have installed the PokemonEval project and its dependencies:
+Make sure you have installed the PokemonGym project and its dependencies:
 ```bash
 pip install -r requirements.txt
 ```
@@ -29,7 +29,7 @@ export GOOGLE_API_KEY=your_google_key_here        # For Gemini
 
 The Demo Agent is an AI agent that uses various LLMs (Claude, GPT-4o, Gemini, or Llama) to make decisions based on the game state, demonstrating how to build an agent that can:
 
-1. Connect to the PokemonEval server
+1. Connect to the PokemonGym server
 2. Observe the game state
 3. Make decisions based on the observed state
 4. Take actions to play the game
@@ -44,7 +44,7 @@ python agents/demo_agent.py
 ```
 
 Command-line arguments:
-- `--server`: URL of the PokemonEval server (default: http://localhost:8080)
+- `--server`: URL of the PokemonGym server (default: http://localhost:8080)
 - `--steps`: Number of steps to run (default: 1000000)
 - `--headless`: Run without displaying the game (default: False)
 - `--sound`: Enable sound (default: False)
@@ -62,7 +62,7 @@ Command-line arguments:
 The Demo Agent has the following components:
 
 1. **AIServerAgent**: Main class that:
-   - Communicates with the PokemonEval server
+   - Communicates with the PokemonGym server
    - Manages the game state
    - Calls the language model for decision making
    - Executes actions based on the model's decisions
@@ -136,7 +136,7 @@ def run(self, max_steps=1000):
 
 ## Human Agent
 
-The Human Agent provides a pygame-based interface that allows humans to play Pokemon Red through the PokemonEval server, useful for:
+The Human Agent provides a pygame-based interface that allows humans to play Pokemon Red through the PokemonGym server, useful for:
 
 1. Establishing human baseline performance for comparison with AI agents
 2. Gathering human gameplay data for training imitation learning agents
@@ -152,7 +152,7 @@ python agents/human_agent.py
 ```
 
 Command-line arguments:
-- `--server`: URL of the PokemonEval server (default: http://localhost:8080)
+- `--server`: URL of the PokemonGym server (default: http://localhost:8080)
 - `--sound`: Enable sound (optional)
 - `--load-state`: Path to a saved state file to load
 - `--load-autosave`: Load the latest autosave

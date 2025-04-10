@@ -16,7 +16,7 @@
 
 ## Overview
 
-PokemonEval is a platform that allows AI agents to play Pokemon Red through a server-client architecture. The system includes:
+PokemonGym is a platform that allows AI agents to play Pokemon Red through a server-client architecture. The system includes:
 
 - **[Evaluator](./evaluator/README.md)**: Evaluation metrics and scoring system for Pokemon Red gameplay
 - **[Server](./server/README.md)**: FastAPI server that controls Pokemon Red emulation and exposes game state via API
@@ -47,6 +47,11 @@ PokemonEval is a platform that allows AI agents to play Pokemon Red through a se
    python agents/human_agent.py
    ```
 
+5. **Run the automated evaluation:**
+   ```bash
+   bash run.sh
+   ```
+
 ## Installation
 
 ### Prerequisites
@@ -59,8 +64,8 @@ PokemonEval is a platform that allows AI agents to play Pokemon Red through a se
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/PokemonEval.git
-cd PokemonEval
+git clone https://github.com/yourusername/PokemonGym.git
+cd PokemonGym
 ```
 
 2. Install dependencies:
@@ -81,7 +86,7 @@ export GOOGLE_API_KEY=your_google_key_here        # For Gemini
 ## Repository Structure
 
 ```
-PokemonEval/
+PokemonGym/
 ├── server/                # Server implementation
 │   ├── evaluator_server.py  # FastAPI server implementation
 │   └── README.md            # Server documentation
@@ -98,8 +103,8 @@ PokemonEval/
 │   └── README.md            # Results documentation
 ├── pokemon_env/           # Environment utilities
 ├── gameplay_sessions/     # Session data storage
-├── run_pokemon_servers.sh # Script for running multiple servers
-├── stop_pokemon_servers.sh # Script for stopping servers
+├── evaluate.py            # Main evaluation script
+├── run.sh                 # Bash script for running evaluation
 └── README.md              # Main documentation
 ```
 
@@ -174,37 +179,23 @@ Options:
 - F5: Save current state
 - F7: Load last saved state
 
-## Running Multiple AI Agents Simultaneously
+## Automated Evaluation
 
-You can run multiple AI agents simultaneously using the provided bash script:
+You can run an automated evaluation using the provided run.sh script:
 
 ```bash
-bash run_pokemon_servers.sh
+bash run.sh
 ```
 
-This will start four separate emulation servers on different ports (8080-8083) and launch each AI agent connected to its respective server.
+This script runs the evaluation for a specified duration (default: 1 minute) and outputs results to the `evaluation_sessions/latest_evaluation` directory.
 
-To run a specific model only:
+Options (set as environment variables):
+- `INTELLIGENCE_URL`: URL of the AI agent (default: http://localhost:8000)
+- `MAX_DURATION`: Duration of the evaluation in minutes (default: 1)
+
+Example with custom settings:
 ```bash
-# Run only Llama 4
-bash run_pokemon_servers.sh --llama-only
-
-# Run only Claude
-bash run_pokemon_servers.sh --claude-only
-
-# Run only OpenAI
-bash run_pokemon_servers.sh --openai-only
-
-# Run only Gemini
-bash run_pokemon_servers.sh --gemini-only
-```
-
-### Stopping the Servers
-
-To stop all servers and agents:
-
-```bash
-bash stop_pokemon_servers.sh
+INTELLIGENCE_URL=http://localhost:9000 MAX_DURATION=5 bash run.sh
 ```
 
 ## Game State Management
