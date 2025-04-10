@@ -3,7 +3,7 @@
 # Check if PID file exists
 if [ ! -f pokemon_pids.txt ]; then
     echo "pokemon_pids.txt file not found, cannot stop processes."
-    echo "If processes are still running, use ps aux | grep 'evaluator_server\|demo_agent' to find PIDs and terminate manually."
+    echo "If processes are still running, use ps aux | grep 'evaluator.evaluator_server\|agents/demo_agent' to find PIDs and terminate manually."
     exit 1
 fi
 

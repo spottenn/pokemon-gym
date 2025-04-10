@@ -81,7 +81,7 @@ start_pair() {
     local model_name=$5
     
     # Start server
-    python -m server.evaluator_server --host 0.0.0.0 --port $port --rom $rom > logs/server_$model.log 2>&1 &
+    python -m evaluator.evaluator_server --host 0.0.0.0 --port $port --rom $rom > logs/server_$model.log 2>&1 &
     local server_pid=$!
     SERVER_PIDS="$SERVER_PIDS $server_pid"
     echo "Starting $model server (port $port), PID: $server_pid"
@@ -91,7 +91,7 @@ start_pair() {
     sleep 15
     
     # Start agent
-    python demo_agent.py --provider $provider --model $model_name --server http://localhost:$port --headless --log-file logs/agent_$model.jsonl > logs/agent_$model.log 2>&1 &
+    python agents/demo_agent.py --provider $provider --model $model_name --server http://localhost:$port --headless --log-file logs/agent_$model.jsonl > logs/agent_$model.log 2>&1 &
     local agent_pid=$!
     AGENT_PIDS="$AGENT_PIDS $agent_pid"
     echo "Starting $model agent, PID: $agent_pid"
