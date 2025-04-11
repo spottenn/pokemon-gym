@@ -174,25 +174,6 @@ Options:
 - F5: Save current state
 - F7: Load last saved state
 
-## Automated Evaluation
-
-You can run an automated evaluation using the provided run.sh script:
-
-```bash
-bash run.sh
-```
-
-This script runs the evaluation for a specified duration (default: 1 minute) and outputs results to the `evaluation_sessions/latest_evaluation` directory.
-
-Options (set as environment variables):
-- `INTELLIGENCE_URL`: URL of the AI agent (default: http://localhost:8000)
-- `MAX_DURATION`: Duration of the evaluation in minutes (default: 1)
-
-Example with custom settings:
-```bash
-INTELLIGENCE_URL=http://localhost:9000 MAX_DURATION=5 bash run.sh
-```
-
 ## Game State Management
 
 ### Continuing Sessions
