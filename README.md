@@ -47,11 +47,6 @@ PokemonGym is a platform that allows AI agents to play Pokemon Red through a ser
    python agents/human_agent.py
    ```
 
-5. **Run the automated evaluation:**
-   ```bash
-   bash run.sh
-   ```
-
 ## Installation
 
 ### Prerequisites
