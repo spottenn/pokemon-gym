@@ -184,8 +184,18 @@ class AIServerAgent:
                 generation_config=self.generation_config
             )
             logger.info(f"Using Gemini provider with model: {self.model_name}")
+        elif self.provider == "cerebras":
+            api_key = os.getenv("CEREBRAS_API_KEY")
+            if not api_key:
+                raise ValueError("CEREBRAS_API_KEY environment variable not set")
+            self.client = OpenAI(
+                api_key=api_key,
+                base_url="https://api.cerebras.ai/v1"
+            )
+            self.model_name = model_name or "qwen-3-32b"
+            logger.info(f"Using Cerebras provider with model: {self.model_name}")
         else:
-            raise ValueError(f"Unsupported provider: {self.provider}. Choose 'claude', 'openai', 'openrouter', or 'gemini'")
+            raise ValueError(f"Unsupported provider: {self.provider}. Choose 'claude', 'openai', 'openrouter', 'gemini', or 'cerebras'")
         
         # Chat history
         self.message_history = []
@@ -1490,8 +1500,8 @@ def main():
     parser.add_argument("--steps", type=int, default=1000000, help="Number of steps to run")
     parser.add_argument("--headless", action="store_true", help="Run headless")
     parser.add_argument("--sound", action="store_true", help="Enable sound")
-    parser.add_argument("--provider", type=str, default="claude", choices=["claude", "openai", "openrouter", "gemini"], 
-                      help="LLM provider to use (claude, openai, openrouter, gemini)")
+    parser.add_argument("--provider", type=str, default="claude", choices=["claude", "openai", "openrouter", "gemini", "cerebras"],
+                      help="LLM provider to use (claude, openai, openrouter, gemini, cerebras)")
     parser.add_argument("--model", type=str, default=None, help="Model name for the selected provider")
     parser.add_argument("--temperature", type=float, default=1.0, help="Temperature parameter for Claude")
     parser.add_argument("--max-tokens", type=int, default=4000, help="Maximum tokens for Claude to generate")

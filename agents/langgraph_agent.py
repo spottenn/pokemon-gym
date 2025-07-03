@@ -258,9 +258,20 @@ class LLMProvider:
                 generation_config=self.generation_config
             )
             logger.info(f"Using Gemini provider with model: {self.model_name}")
+
+        elif self.provider == "cerebras":
+            api_key = os.getenv("CEREBRAS_API_KEY")
+            if not api_key:
+                raise ValueError("CEREBRAS_API_KEY environment variable not set")
+            self.client = OpenAI(
+                api_key=api_key,
+                base_url="https://api.cerebras.ai/v1"
+            )
+            self.model_name = model_name or "qwen-3-32b"
+            logger.info(f"Using Cerebras provider with model: {self.model_name}")
         
         else:
-            raise ValueError(f"Unsupported provider: {self.provider}. Choose 'claude', 'openai', 'openrouter', or 'gemini'")
+            raise ValueError(f"Unsupported provider: {self.provider}. Choose 'claude', 'openai', 'openrouter', 'gemini', or 'cerebras'")
     
     def get_llm(self) -> Runnable:
         """Returns a LangChain-compatible LLM interface"""
@@ -292,6 +303,15 @@ class LLMProvider:
                 max_output_tokens=self.max_tokens,
                 google_api_key=os.getenv("GOOGLE_API_KEY"),
                 convert_system_message_to_human=True  # Gemini doesn't natively support system messages
+            )
+
+        elif self.provider == "cerebras":
+            return ChatOpenAI(
+                model=self.model_name,
+                temperature=self.temperature,
+                max_tokens=self.max_tokens,
+                openai_api_key=os.getenv("CEREBRAS_API_KEY"),
+                base_url="https://api.cerebras.ai/v1"
             )
             
         else:
@@ -1732,7 +1752,7 @@ def main():
     
     # LLM settings
     parser.add_argument("--provider", type=str, default="claude",
-                      choices=["claude", "openai", "gemini", "openrouter"],
+                      choices=["claude", "openai", "gemini", "openrouter", "cerebras"],
                       help="LLM provider")
     parser.add_argument("--model", type=str, default=None,
                       help="Specific model name (if None, uses provider default)")
