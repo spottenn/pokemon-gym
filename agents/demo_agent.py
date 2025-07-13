@@ -15,6 +15,10 @@ import os
 from anthropic import Anthropic
 from openai import OpenAI
 import google.generativeai as genai
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
@@ -172,7 +176,7 @@ class AIServerAgent:
             if not api_key:
                 raise ValueError("GOOGLE_API_KEY environment variable not set")
             genai.configure(api_key=api_key)
-            self.model_name = model_name or "gemini-2.5-pro-preview-03-25"
+            self.model_name = model_name or "gemini-2.5-flash"
             self.generation_config = {
                 "temperature": temperature,
                 "max_output_tokens": max_tokens,

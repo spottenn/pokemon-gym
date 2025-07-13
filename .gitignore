@@ -52,3 +52,6 @@ ENV/
 Pokemon*
 gameplay_sessions/
 evaluation_sessions/
+/.venv-windows/
+/.venv/
+agent_log*.jsonl

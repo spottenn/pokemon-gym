@@ -10,6 +10,10 @@ from enum import Enum
 import base64
 import io
 from PIL import Image
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 import requests
 

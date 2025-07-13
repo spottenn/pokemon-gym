@@ -51,7 +51,7 @@ PokemonGym is a platform that allows AI agents to play Pokemon Red through a ser
 
 ### Prerequisites
 
-- Python 3.8+
+- Tested on Python 3.11 
 - PyBoy and its dependencies
 - Pokemon Red ROM file (not included)
 
@@ -70,12 +70,16 @@ pip install -r requirements.txt
 
 3. Place your Pokemon Red ROM file in the root directory and name it `Pokemon_Red.gb`
 
-4. Set API keys for AI agents:
+4. Set up API keys for AI agents:
 ```bash
-export ANTHROPIC_API_KEY=your_anthropic_key_here  # For Claude
-export OPENAI_API_KEY=your_openai_key_here        # For GPT-4o
-export OPENROUTER_API_KEY=your_openrouter_key_here  # For Llama
-export GOOGLE_API_KEY=your_google_key_here        # For Gemini
+# Copy the example environment file
+cp .env.example .env
+
+# Edit .env and add your actual API keys
+# ANTHROPIC_API_KEY=your_anthropic_key_here  # For Claude
+# OPENAI_API_KEY=your_openai_key_here        # For GPT-4o
+# OPENROUTER_API_KEY=your_openrouter_key_here  # For Llama
+# GOOGLE_API_KEY=your_google_key_here        # For Gemini
 ```
 
 ## Repository Structure
@@ -129,10 +133,7 @@ The demo AI agent uses Claude to make decisions based on the game screen:
 python agents/demo_agent.py
 ```
 
-First, set your Anthropic API key:
-```bash
-export ANTHROPIC_API_KEY=your_api_key_here
-```
+First, make sure you have set up your API keys in the `.env` file (see Installation section above).
 
 Options:
 - `--server`: Server URL (default: http://localhost:8080)

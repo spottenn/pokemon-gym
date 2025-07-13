@@ -17,12 +17,16 @@ For the Human Agent, ensure pygame is installed:
 pip install pygame
 ```
 
-For the Demo Agent, set up your API keys:
+For the Demo Agent, set up your API keys by copying and editing the environment file:
 ```bash
-export ANTHROPIC_API_KEY=your_anthropic_key_here  # For Claude
-export OPENAI_API_KEY=your_openai_key_here        # For GPT-4o
-export OPENROUTER_API_KEY=your_openrouter_key_here  # For Llama
-export GOOGLE_API_KEY=your_google_key_here        # For Gemini
+# Copy the example environment file
+cp .env.example .env
+
+# Edit .env and add your actual API keys
+# ANTHROPIC_API_KEY=your_anthropic_key_here  # For Claude
+# OPENAI_API_KEY=your_openai_key_here        # For GPT-4o
+# OPENROUTER_API_KEY=your_openrouter_key_here  # For Llama
+# GOOGLE_API_KEY=your_google_key_here        # For Gemini
 ```
 
 ## Demo Agent

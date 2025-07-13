@@ -31,3 +31,6 @@ pygame==2.6.1      # For game development and human agent
 
 # Benchmarking
 benchflow>=0.1.13  # For benchmark management
+
+# Environment configuration
+python-dotenv>=1.0.0  # For loading .env files
