@@ -5,6 +5,7 @@ from collections import deque
 import heapq
 from typing import Dict, Any
 import time
+import threading
 
 from .memory_reader import PokemonRedReader, StatusCondition
 from PIL import Image
@@ -14,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 class Emulator:
-    def __init__(self, rom_path, headless=True, sound=False):
+    def __init__(self, rom_path, headless=True, sound=False, streaming_mode=False):
         if headless:
             self.pyboy = PyBoy(
                 rom_path,
@@ -27,11 +28,19 @@ class Emulator:
                 cgb=True,
                 sound=sound,
             )
+        
+        # Streaming mode configuration
+        self.streaming_mode = streaming_mode
+        self.streaming_thread = None
+        self.streaming_active = False
+        self.action_lock = threading.Lock()  # Protects emulator during actions
+        self.stop_streaming_event = threading.Event()  # Signal to stop streaming thread
 
     def tick(self, frames):
         """Advance the emulator by the specified number of frames."""
-        for _ in range(frames):
-            self.pyboy.tick()
+        with self.action_lock:
+            for _ in range(frames):
+                self.pyboy.tick()
 
     def initialize(self):
         """Initialize the emulator."""
@@ -39,7 +48,56 @@ class Emulator:
         self.pyboy.set_emulation_speed(0)
         for _ in range(60):
             self.tick(60)
-        self.pyboy.set_emulation_speed(5)
+        self.pyboy.set_emulation_speed(1)
+        
+        # Start streaming mode if enabled
+        if self.streaming_mode:
+            self.start_streaming()
+    
+    def start_streaming(self):
+        """Start the streaming thread for real-time emulation."""
+        if self.streaming_active:
+            logger.warning("Streaming is already active")
+            return
+            
+        logger.info("Starting streaming mode")
+        self.streaming_active = True
+        self.stop_streaming_event.clear()
+        self.streaming_thread = threading.Thread(target=self._streaming_loop, daemon=True)
+        self.streaming_thread.start()
+    
+    def stop_streaming(self):
+        """Stop the streaming thread."""
+        if not self.streaming_active:
+            return
+            
+        logger.info("Stopping streaming mode")
+        self.streaming_active = False
+        self.stop_streaming_event.set()
+        
+        if self.streaming_thread and self.streaming_thread.is_alive():
+            self.streaming_thread.join(timeout=1.0)
+            if self.streaming_thread.is_alive():
+                logger.warning("Streaming thread did not stop cleanly")
+    
+    def _streaming_loop(self):
+        """Background thread that continuously ticks the emulator during idle periods."""
+        logger.info("Streaming loop started")
+        
+        while self.streaming_active and not self.stop_streaming_event.is_set():
+            # Try to acquire lock with a timeout to avoid blocking indefinitely
+            if self.action_lock.acquire(timeout=0.001):  # 1ms timeout
+                try:
+                    # Only tick if we're still streaming and not stopping
+                    if self.streaming_active and not self.stop_streaming_event.is_set():
+                        self.pyboy.tick()
+                finally:
+                    self.action_lock.release()
+            else:
+                # Lock is held by action processing, wait a bit before trying again
+                time.sleep(0.001)  # 1ms wait
+        
+        logger.info("Streaming loop ended")
 
     def get_screenshot(self):
         """Get the current screenshot."""
@@ -565,4 +623,7 @@ class Emulator:
         return memory_dict
 
     def stop(self):
+        # Stop streaming thread first
+        if self.streaming_mode:
+            self.stop_streaming()
         self.pyboy.stop()

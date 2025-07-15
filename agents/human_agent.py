@@ -65,14 +65,15 @@ class HumanAgent:
         self.font = pygame.font.SysFont('Arial', 14)
         
     def initialize(self, headless: bool = False, sound: bool = False, 
-                  load_state_file: str = None, load_autosave: bool = False,
-                  session_id: str = None) -> Dict[str, Any]:
+                  streaming_mode: bool = False, load_state_file: str = None, 
+                  load_autosave: bool = False, session_id: str = None) -> Dict[str, Any]:
         """
         Initialize the game environment
         
         Args:
             headless: Whether to run without a GUI
             sound: Whether to enable sound
+            streaming_mode: Whether to enable real-time streaming mode
             load_state_file: Optional path to a saved state file to load
             load_autosave: Whether to load the latest autosave
             session_id: Optional session ID to continue an existing session
@@ -87,6 +88,7 @@ class HumanAgent:
             init_params = {
                 "headless": headless,
                 "sound": sound,
+                "streaming_mode": streaming_mode,
                 "load_autosave": load_autosave
             }
             
@@ -345,6 +347,7 @@ def main():
     parser = argparse.ArgumentParser(description="Pokemon Human Agent")
     parser.add_argument("--server", type=str, default="http://localhost:8080", help="Evaluation server URL")
     parser.add_argument("--sound", action="store_true", help="Enable sound")
+    parser.add_argument("--streaming", action="store_true", help="Enable real-time streaming mode")
     parser.add_argument("--load-state", type=str, help="Path to a saved state file to load")
     parser.add_argument("--load-autosave", action="store_true", help="Load the latest autosave")
     parser.add_argument("--session", type=str, help="Session ID to continue (e.g., session_20250404_180209)")
@@ -359,6 +362,7 @@ def main():
         agent.initialize(
             headless=False, 
             sound=args.sound,
+            streaming_mode=args.streaming,
             load_state_file=args.load_state,
             load_autosave=args.load_autosave,
             session_id=args.session
