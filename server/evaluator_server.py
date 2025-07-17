@@ -179,7 +179,7 @@ def initialize_csv_logger(custom_filename=None, append_mode=False):
         file_exists = os.path.exists(filename)
         file_mode = 'a' if append_mode and file_exists else 'w'
         
-        CSV_FILE = open(filename, file_mode, newline='')
+        CSV_FILE = open(filename, file_mode, newline='', encoding='utf-8')
         fieldnames = ['timestamp', 'step_number', 'action_type', 'action_details', 'badges', 
                       'inventory', 'location', 'money', 'coordinates', 'pokemons', 'dialog', 
                       'execution_time', 'score']
