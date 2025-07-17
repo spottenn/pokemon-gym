@@ -8,7 +8,6 @@ import csv
 import datetime
 from typing import Dict, List, Any, Optional
 import threading  # For the timeout timer
-import atexit  # For cleanup on exit
 
 import uvicorn
 from fastapi import FastAPI, HTTPException
@@ -34,7 +33,7 @@ EVALUATOR = None  # Add evaluator instance variable
 SESSION_START_TIME = None  # Track when the session started
 SESSION_TIMER = None  # Timer to track 30 minute limit
 MAX_SESSION_DURATION = 4 * 60 * 60  # 30 minutes in seconds
-AUTOSAVE_INTERVAL = 10  # Automatically save every 10 steps
+AUTOSAVE_INTERVAL = 50  # Automatically save every 50 steps
 AUTOSAVE_FILENAME = "autosave.state"  # Filename for autosave
 
 # Output directory structure
@@ -66,7 +65,6 @@ app.add_middleware(
 class InitializeRequest(BaseModel):
     headless: bool = True
     sound: bool = False
-    streaming_mode: Optional[bool] = None  # Whether to enable real-time streaming mode (None = use dev default)
     load_state_file: Optional[str] = None  # Optional path to a saved state file
     load_autosave: bool = False  # Whether to load the latest autosave
     session_id: Optional[str] = None  # Optional session ID to continue an existing session
@@ -242,26 +240,26 @@ def log_response(response: GameStateResponse, action_type: str, action_details: 
         logger.error(f"Error logging to CSV: {e}")
 
 
-def cleanup_session(reason="unknown"):
-    """Clean up the current session and save state."""
+def force_stop_session():
+    """Force stop the current session after timeout."""
     global ENV, CSV_FILE, CSV_WRITER, EVALUATOR, SESSION_START_TIME, SESSION_TIMER
     
-    logger.info(f"Cleaning up session due to: {reason}")
+    logger.warning(f"Session timeout reached ({MAX_SESSION_DURATION/60} minutes). Forcing session to stop.")
     
     try:
-        if ENV and current_session_dir:
+        if ENV:
             # Save state before stopping
             try:
-                cleanup_save_path = os.path.join(current_session_dir, f"{reason}_state.state")
-                ENV.save_state(cleanup_save_path)
-                logger.info(f"Saved game state to {cleanup_save_path}")
+                timeout_save_path = os.path.join(current_session_dir, "timeout_state.state")
+                ENV.save_state(timeout_save_path)
+                logger.info(f"Saved game state at timeout to {timeout_save_path}")
                 
                 # Also update the autosave file
                 autosave_path = os.path.join(current_session_dir, AUTOSAVE_FILENAME)
                 ENV.save_state(autosave_path)
-                logger.info(f"Updated autosave during cleanup")
+                logger.info(f"Updated autosave at timeout")
             except Exception as e:
-                logger.error(f"Error saving game state during cleanup: {e}")
+                logger.error(f"Error saving game state at timeout: {e}")
                 
             ENV.stop()
             ENV = None
@@ -280,19 +278,9 @@ def cleanup_session(reason="unknown"):
             SESSION_TIMER.cancel()
             SESSION_TIMER = None
             
-        logger.info(f"Session cleanup completed for: {reason}")
+        logger.info("Session has been forcibly stopped due to timeout")
     except Exception as e:
-        logger.error(f"Error during session cleanup: {e}")
-
-def force_stop_session():
-    """Force stop the current session after timeout."""
-    logger.warning(f"Session timeout reached ({MAX_SESSION_DURATION/60} minutes). Forcing session to stop.")
-    cleanup_session("timeout")
-
-def shutdown_handler():
-    """Handle graceful shutdown on server restart/exit."""
-    logger.info("Server shutting down - performing graceful cleanup")
-    cleanup_session("shutdown")
+        logger.error(f"Error during forced session stop: {e}")
 
 
 # API Endpoints
@@ -375,14 +363,10 @@ async def initialize(request: InitializeRequest):
     # Initialize environment
     try:
         logger.info(f"Initializing environment with ROM: {ROM_PATH}")
-        
-        streaming_mode = request.streaming_mode
-
         ENV = PokemonEnvironment(
             rom_path=ROM_PATH,
             headless=request.headless,
-            sound=request.sound,
-            streaming_mode=streaming_mode
+            sound=request.sound
         )
         logger.info("env initialized")
         
@@ -589,10 +573,7 @@ async def take_action(request: ActionRequest):
         if ENV.steps_taken % AUTOSAVE_INTERVAL == 0:
             try:
                 autosave_path = os.path.join(current_session_dir, AUTOSAVE_FILENAME)
-                # Also create step-specific autosave
-                step_autosave_path = os.path.join(current_session_dir, f"autosave_step_{ENV.steps_taken}.state")
                 ENV.save_state(autosave_path)
-                ENV.save_state(step_autosave_path)
                 logger.info(f"Auto-saved game state at step {ENV.steps_taken} to {autosave_path}")
             except Exception as e:
                 logger.error(f"Error during auto-save: {e}")
@@ -820,29 +801,11 @@ if __name__ == "__main__":
     parser.add_argument("--port", type=int, default=8080, help="Port to run the server on")
     parser.add_argument("--rom", type=str, default="Pokemon_Red.gb", help="Path to the Pokemon ROM file")
     parser.add_argument("--log-file", type=str, help="Custom CSV filename (optional)")
-    parser.add_argument("--reload", action="store_true", help="Enable auto-reload for development")
     
     args = parser.parse_args()
     
     # Set ROM path
     ROM_PATH = args.rom
     
-    # Register cleanup handler
-    atexit.register(shutdown_handler)
-    
-    # Check for development mode auto-resume
-    auto_resume = os.environ.get("AUTO_RESUME_SESSION")
-    if auto_resume:
-        logger.info(f"Development mode: Will auto-resume session {auto_resume}")
-    
     # Run the server
-    if args.reload:
-        uvicorn.run(
-            "server.evaluator_server:app", 
-            host=args.host, 
-            port=args.port, 
-            reload=True,
-            reload_dirs=["pokemon_env", "server", "evaluator"]
-        )
-    else:
-        uvicorn.run(app, host=args.host, port=args.port) 
+    uvicorn.run(app, host=args.host, port=args.port) 
