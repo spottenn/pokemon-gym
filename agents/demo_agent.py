@@ -176,7 +176,7 @@ class AIServerAgent:
             if not api_key:
                 raise ValueError("GOOGLE_API_KEY environment variable not set")
             genai.configure(api_key=api_key)
-            self.model_name = model_name or "gemini-2.5-flash-lite"
+            self.model_name = model_name or "gemini-2.5-flash-lite-preview-06-17"
             self.generation_config = {
                 "temperature": temperature,
                 "max_output_tokens": max_tokens,
