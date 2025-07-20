@@ -49,7 +49,7 @@ class GameState:
 class PokemonEnvironment:
     """Environment for Pokemon Red that provides a clean interface for agents."""
     
-    def __init__(self, rom_path: str, headless: bool = True, sound: bool = False, streaming: bool = False):
+    def __init__(self, rom_path: str, headless: bool = True, sound: bool = False):
         """
         Initialize the Pokemon environment.
         
@@ -57,10 +57,9 @@ class PokemonEnvironment:
             rom_path: Path to the Pokemon ROM file
             headless: Whether to run without display
             sound: Whether to enable sound
-            streaming: Whether to run in streaming mode (1x speed, continuous)
         """
         self.emulator = Emulator(rom_path, headless, sound)
-        self.emulator.initialize(streaming=streaming)
+        self.emulator.initialize()
         logger.info("emulator initialized")
         # Store gameplay information
         self.steps_taken = 0
