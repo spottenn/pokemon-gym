@@ -8,6 +8,7 @@ import csv
 import datetime
 from typing import Dict, List, Any, Optional
 import threading  # For the timeout timer
+import queue  # For action queue in streaming mode
 
 import uvicorn
 from fastapi import FastAPI, HTTPException
@@ -16,7 +17,7 @@ from pydantic import BaseModel
 from PIL import Image
 
 from pokemon_env import PokemonEnvironment
-from pokemon_env.action import Action, PressKey, Wait, ActionType
+from pokemon_env.action import PressKey, Wait, ActionType
 from evaluator.evaluate import PokemonEvaluator  # Import the evaluator class
 
 # Set up logging
@@ -35,6 +36,10 @@ SESSION_TIMER = None  # Timer to track 30 minute limit
 MAX_SESSION_DURATION = 4 * 60 * 60  # 30 minutes in seconds
 AUTOSAVE_INTERVAL = 50  # Automatically save every 50 steps
 AUTOSAVE_FILENAME = "autosave.state"  # Filename for autosave
+STREAMING_MODE = False  # Flag for streaming/real-time mode
+ACTION_QUEUE = None  # Queue for actions in streaming mode
+GAME_LOOP_THREAD = None  # Background thread for continuous game loop
+GAME_LOOP_RUNNING = False  # Flag to control game loop
 
 # Output directory structure
 OUTPUT_DIR = "gameplay_sessions"  # Base directory for all sessions
@@ -98,6 +103,84 @@ class GameStateResponse(BaseModel):
 
 class SaveStateRequest(BaseModel):
     filename: Optional[str] = None  # Optional custom filename
+
+
+def continuous_game_loop():
+    """Background thread function for continuous game execution in streaming mode."""
+    global GAME_LOOP_RUNNING, ENV, ACTION_QUEUE
+    
+    logger.info("Starting continuous game loop for streaming mode")
+    
+    # Game Boy runs at ~60 FPS, so we want ~16.67ms per frame
+    frame_time = 1.0 / 60.0
+    
+    while GAME_LOOP_RUNNING:
+        start_time = time.time()
+        
+        try:
+            # Check for actions in the queue (non-blocking)
+            action = None
+            try:
+                action = ACTION_QUEUE.get_nowait()
+                logger.info(f"Processing queued action: {action}")
+            except queue.Empty:
+                # No action available, just tick the emulator
+                pass
+            
+            if action and ENV:
+                # Process the action
+                if action.action_type == ActionType.PRESS_KEY:
+                    ENV.emulator.press_buttons(action.keys)
+                elif action.action_type == ActionType.WAIT:
+                    ENV.emulator.tick(action.frames)
+                    
+                # Update step counter and history
+                ENV.steps_taken += 1
+                ENV._current_state = ENV._get_current_state()
+                
+                # Mark action as processed
+                ACTION_QUEUE.task_done()
+            else:
+                # No action, just tick the emulator to keep game running
+                if ENV:
+                    ENV.emulator.tick(1)
+        
+        except Exception as e:
+            logger.error(f"Error in continuous game loop: {e}")
+        
+        # Sleep to maintain ~60 FPS
+        elapsed = time.time() - start_time
+        sleep_time = max(0, frame_time - elapsed)
+        if sleep_time > 0:
+            time.sleep(sleep_time)
+    
+    logger.info("Continuous game loop stopped")
+
+
+def stop_streaming_mode():
+    """Stop the continuous game loop and clean up streaming mode resources."""
+    global GAME_LOOP_RUNNING, GAME_LOOP_THREAD, ACTION_QUEUE
+    
+    if STREAMING_MODE and GAME_LOOP_RUNNING:
+        logger.info("Stopping streaming mode...")
+        GAME_LOOP_RUNNING = False
+        
+        # Wait for thread to finish
+        if GAME_LOOP_THREAD and GAME_LOOP_THREAD.is_alive():
+            GAME_LOOP_THREAD.join(timeout=2.0)  # Wait up to 2 seconds
+        
+        # Clear the action queue
+        if ACTION_QUEUE:
+            try:
+                while not ACTION_QUEUE.empty():
+                    ACTION_QUEUE.get_nowait()
+                    ACTION_QUEUE.task_done()
+            except queue.Empty:
+                pass
+        
+        GAME_LOOP_THREAD = None
+        ACTION_QUEUE = None
+        logger.info("Streaming mode stopped")
 
 
 def setup_session_directory(session_id: Optional[str] = None):
@@ -366,9 +449,19 @@ async def initialize(request: InitializeRequest):
         ENV = PokemonEnvironment(
             rom_path=ROM_PATH,
             headless=request.headless,
-            sound=request.sound
+            sound=request.sound,
+            streaming=STREAMING_MODE
         )
         logger.info("env initialized")
+        
+        # Start streaming mode if enabled
+        if STREAMING_MODE:
+            global ACTION_QUEUE, GAME_LOOP_THREAD, GAME_LOOP_RUNNING
+            ACTION_QUEUE = queue.Queue()
+            GAME_LOOP_RUNNING = True
+            GAME_LOOP_THREAD = threading.Thread(target=continuous_game_loop, daemon=True)
+            GAME_LOOP_THREAD.start()
+            logger.info("Streaming mode enabled - continuous game loop started")
         
         # If we have a state file to load, load it
         if state_file_to_load:
@@ -533,8 +626,17 @@ async def take_action(request: ActionRequest):
                 detail=f"Unknown action type: {request.action_type}"
             )
         
-        # Execute action
-        state = ENV.step(action)
+        # Execute action - different behavior for streaming vs normal mode
+        if STREAMING_MODE:
+            # In streaming mode, queue the action for background processing
+            ACTION_QUEUE.put(action)
+            logger.info(f"Action queued for streaming mode: {action}")
+            # Return current state immediately without waiting
+            state = ENV._current_state
+            execution_time = 0.0  # No execution time in streaming mode
+        else:
+            # Normal mode - execute action synchronously
+            state = ENV.step(action)
         
         # Get collision map and valid moves
         collision_map = ENV.get_collision_map()
@@ -691,6 +793,9 @@ async def stop_environment():
             logger.error(f"Error writing evaluation summary: {e}")
     
     try:
+        # Stop streaming mode if enabled
+        stop_streaming_mode()
+        
         ENV.stop()
         ENV = None
         
@@ -801,11 +906,13 @@ if __name__ == "__main__":
     parser.add_argument("--port", type=int, default=8080, help="Port to run the server on")
     parser.add_argument("--rom", type=str, default="Pokemon_Red.gb", help="Path to the Pokemon ROM file")
     parser.add_argument("--log-file", type=str, help="Custom CSV filename (optional)")
+    parser.add_argument("--streaming", action="store_true", help="Enable streaming mode (1x speed, continuous play)")
     
     args = parser.parse_args()
     
-    # Set ROM path
+    # Set ROM path and streaming mode
     ROM_PATH = args.rom
+    STREAMING_MODE = args.streaming
     
     # Run the server
     uvicorn.run(app, host=args.host, port=args.port) 

@@ -33,13 +33,15 @@ class Emulator:
         for _ in range(frames):
             self.pyboy.tick()
 
-    def initialize(self):
+    def initialize(self, streaming=False):
         """Initialize the emulator."""
         # Run the emulator for a short time to make sure it's ready
         self.pyboy.set_emulation_speed(0)
         for _ in range(60):
             self.tick(60)
-        self.pyboy.set_emulation_speed(5)
+        # Set speed based on mode: 1x for streaming, 5x for normal
+        speed = 1 if streaming else 5
+        self.pyboy.set_emulation_speed(speed)
 
     def get_screenshot(self):
         """Get the current screenshot."""

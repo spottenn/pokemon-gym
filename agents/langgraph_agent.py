@@ -263,8 +263,15 @@ class LLMProvider:
             )
             logger.info(f"Using Gemini provider with model: {self.model_name}")
         
+        elif self.provider == "ollama":
+            # Ollama doesn't require API keys, just ensure the service is running locally
+            self.client = None  # Not needed for LangChain ChatOpenAI integration
+            self.model_name = model_name or "llava"  # Default to llava multimodal model
+            logger.info(f"Using Ollama provider with model: {self.model_name}")
+            logger.info("Note: Ensure Ollama is running locally on http://localhost:11434")
+        
         else:
-            raise ValueError(f"Unsupported provider: {self.provider}. Choose 'claude', 'openai', 'openrouter', or 'gemini'")
+            raise ValueError(f"Unsupported provider: {self.provider}. Choose 'claude', 'openai', 'openrouter', 'gemini', or 'ollama'")
     
     def get_llm(self) -> Runnable:
         """Returns a LangChain-compatible LLM interface"""
@@ -277,15 +284,24 @@ class LLMProvider:
                 anthropic_api_key=os.getenv("ANTHROPIC_API_KEY")
             )
         
-        elif self.provider in ["openai", "openrouter"]:
+        elif self.provider in ["openai", "openrouter", "ollama"]:
             # For OpenRouter, we use OpenAI's client with a different base URL
-            base_url = "https://openrouter.ai/api/v1" if self.provider == "openrouter" else None
+            # For Ollama, we use OpenAI's client with local Ollama endpoint
+            if self.provider == "openrouter":
+                base_url = "https://openrouter.ai/api/v1"
+                api_key = os.getenv("OPENROUTER_API_KEY")
+            elif self.provider == "ollama":
+                base_url = "http://localhost:11434/v1"
+                api_key = "ollama"  # Required but unused for Ollama
+            else:  # openai
+                base_url = None
+                api_key = os.getenv("OPENAI_API_KEY")
             
             return ChatOpenAI(
                 model=self.model_name,
                 temperature=self.temperature,
                 max_tokens=self.max_tokens,
-                openai_api_key=os.getenv("OPENAI_API_KEY" if self.provider == "openai" else "OPENROUTER_API_KEY"),
+                openai_api_key=api_key,
                 base_url=base_url
             )
         
@@ -1736,7 +1752,7 @@ def main():
     
     # LLM settings
     parser.add_argument("--provider", type=str, default="claude",
-                      choices=["claude", "openai", "gemini", "openrouter"],
+                      choices=["claude", "openai", "gemini", "openrouter", "ollama"],
                       help="LLM provider")
     parser.add_argument("--model", type=str, default=None,
                       help="Specific model name (if None, uses provider default)")
