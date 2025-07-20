@@ -266,7 +266,7 @@ class LLMProvider:
         elif self.provider == "ollama":
             # Ollama doesn't require API keys, just ensure the service is running locally
             self.client = None  # Not needed for LangChain ChatOpenAI integration
-            self.model_name = model_name or "llava"  # Default to llava multimodal model
+            self.model_name = model_name or "gemma3"  # Default to llava multimodal model
             logger.info(f"Using Ollama provider with model: {self.model_name}")
             logger.info("Note: Ensure Ollama is running locally on http://localhost:11434")
         
