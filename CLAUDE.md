@@ -20,9 +20,8 @@ This is **Pokemon-Gym**, a platform for evaluating AI agents on Pokemon Red game
 - **Human Agent** (`agents/human_agent.py`): Human-playable interface with keyboard controls
 
 ### Streaming Infrastructure
-- **Development Server** (`dev_server.py`): Live reload server with automatic session resumption
 - **Streaming Mode**: Emulator kept at 1x continuous speed for live content (see MVP plan)
-- **Session Management**: Automatic saves every 10 steps with session continuation support
+- **Session Management**: Automatic saves every 50 steps with session continuation support
 
 ## Environment Setup
 
@@ -50,7 +49,7 @@ For each new session:
 source .venv/bin/activate  # Linux/Mac
 
 # Run commands on subsequent bash calls. eg.:
-python dev_server.py
+python -m server.evaluator_server
 ```
 
 ### Environment Variables
@@ -65,15 +64,6 @@ Copy `.env.example` to `.env` and configure API keys:
 Place `Pokemon_Red.gb` ROM file in the project root directory.
 
 ## Common Development Commands
-
-### Development Server (Recommended)
-```bash
-# Start development server with live reload and streaming mode
-python dev_server.py
-
-# Resume specific session
-python dev_server.py --session session_20250404_180209
-```
 
 ### Traditional Server
 ```bash
@@ -121,18 +111,21 @@ The `langgraph_agent.py` represents an alternative next-generation agent archite
 - **Visual Analysis**: Screenshot analysis integrated into decision-making
 - **Error Handling**: Robust retry logic and recovery strategies
 
+### Development Workflow
+For development, use PyCharm debug configuration to restart components as needed. No live reloading is used.
+
 ### Streaming Setup (MVP)
 For live streaming Pokemon gameplay with AI thoughts:
-1. Start server: `python dev_server.py`
+1. Start server: `python -m server.evaluator_server`
 2. Run agent with streaming: `python agents/vision_agent.py`, arguments TBD
 3. Configure OBS to read display log output
 4. Add game window capture for Pokemon gameplay
 
 ### Session Management
-- Sessions auto-save every 10 steps to `gameplay_sessions/`
+- Sessions auto-save every 50 steps to `gameplay_sessions/`
 - Use `--session` to continue previous sessions
 - State files can be loaded with `--load-state` or `--load-autosave`
-- Development server automatically resumes latest session
+- Visual agent will automatically resumes latest session
 
 ## Key Files for Understanding
 
@@ -143,7 +136,6 @@ For live streaming Pokemon gameplay with AI thoughts:
 
 ### Server Integration
 - `server/evaluator_server.py:66-82`: API request/response models
-- `dev_server.py:39-116`: Development server with live reload configuration
 
 ### Streaming Architecture
 - `Create_Channel_Plan_MVP.md`: Detailed streaming implementation plan
@@ -158,8 +150,8 @@ For live streaming Pokemon gameplay with AI thoughts:
 
 ## Important Notes
 
-- Always use the development server (`dev_server.py`) for active development
+- Use PyCharm debug configurations for development
 - The LangGraph agent is the preferred implementation for complex gameplay
-- Sessions are automatically managed - no manual save/load needed in development
+- Sessions save automatically every 10 steps to `gameplay_sessions/`
 - ROM file (`Pokemon_Red.gb`) must be present in project root
 - All agents support multiple LLM providers (Claude, OpenAI, Gemini, OpenRouter)
