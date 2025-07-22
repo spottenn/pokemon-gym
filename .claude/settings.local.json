@@ -6,8 +6,16 @@
     "deny": []
   },
   "hooks": {
-    "PreToolUse": {
-      "Bash": ".venv\\Scripts\\activate"
-    }
+    "PreToolUse": [
+      {
+        "matcher": "BashTool",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".venv\\Scripts\\activate"
+          }
+        ]
+      }
+    ]
   }
 }
