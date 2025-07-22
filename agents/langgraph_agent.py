@@ -339,6 +339,7 @@ class PokemonServerInterface:
         self, 
         headless: bool = True, 
         sound: bool = False,
+        streaming: bool = False,
         load_state_file: Optional[str] = None, 
         load_autosave: bool = False,
         session_id: Optional[str] = None
@@ -349,6 +350,7 @@ class PokemonServerInterface:
         Args:
             headless: Whether to run without a GUI
             sound: Whether to enable sound
+            streaming: Whether to enable streaming mode (1x speed continuous operation)
             load_state_file: Optional path to a saved state file to load
             load_autosave: Whether to load the latest autosave
             session_id: Optional session ID to continue an existing session
@@ -361,6 +363,7 @@ class PokemonServerInterface:
             init_params = {
                 "headless": headless,
                 "sound": sound,
+                "streaming": streaming,
                 "load_autosave": load_autosave
             }
             
@@ -845,6 +848,19 @@ What can you observe in this image? Be specific about:
                     # Call LLM
                     response = llm.invoke(messages)
                     ai_message = response.content
+                    
+                    # === STREAMING THOUGHTS FOR OBS INTEGRATION ===
+                    # Write the LLM response to thoughts file for live streaming
+                    try:
+                        streaming_file = "thoughts.txt"
+                        with open(streaming_file, 'w', encoding='utf-8') as f:
+                            f.write(f"=== AI Thoughts - Step {state.pokemon_state.step_count} ===\n\n")
+                            f.write(ai_message)
+                            location = state.pokemon_state.game_state.get('location', 'Unknown') if state.pokemon_state.game_state else 'Unknown'
+                            f.write(f"\n\n=== Location: {location} ===")
+                    except Exception as streaming_error:
+                        logger.error(f"Failed to write streaming thoughts: {streaming_error}")
+                    # === END STREAMING THOUGHTS ===
                     
                     # If we got here, the call succeeded
                     if retry_count > 0:
@@ -1754,6 +1770,7 @@ What can you observe in this image? Be specific about:
         self, 
         headless: bool = True, 
         sound: bool = False,
+        streaming: bool = False,
         load_state_file: Optional[str] = None, 
         load_autosave: bool = False
     ) -> Dict[str, Any]:
@@ -1763,6 +1780,7 @@ What can you observe in this image? Be specific about:
         Args:
             headless: Whether to run without a GUI
             sound: Whether to enable sound
+            streaming: Whether to enable streaming mode (1x speed continuous operation)
             load_state_file: Optional path to a saved state file to load
             load_autosave: Whether to load the latest autosave
             
@@ -1782,6 +1800,7 @@ What can you observe in this image? Be specific about:
         game_state = self.pokemon_server.initialize(
             headless=headless,
             sound=sound,
+            streaming=streaming,
             load_state_file=load_state_file,
             load_autosave=load_autosave,
             session_id=resume_session_id or self.session_id
@@ -1815,6 +1834,8 @@ def main():
                       help="Run in headless mode (no GUI)")
     parser.add_argument("--sound", action="store_true",
                       help="Enable sound")
+    parser.add_argument("--streaming", action="store_true",
+                      help="Enable streaming mode (1x speed continuous operation)")
     parser.add_argument("--load_state", type=str, default=None,
                       help="Load a saved state file")
     parser.add_argument("--load_autosave", action="store_true",
@@ -1842,6 +1863,7 @@ def main():
     agent.initialize(
         headless=args.headless,
         sound=args.sound,
+        streaming=args.streaming,
         load_state_file=args.load_state,
         load_autosave=args.load_autosave
     )

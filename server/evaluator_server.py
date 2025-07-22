@@ -65,6 +65,7 @@ app.add_middleware(
 class InitializeRequest(BaseModel):
     headless: bool = True
     sound: bool = False
+    streaming: bool = False  # Whether to enable streaming mode (1x speed continuous operation)
     load_state_file: Optional[str] = None  # Optional path to a saved state file
     load_autosave: bool = False  # Whether to load the latest autosave
     session_id: Optional[str] = None  # Optional session ID to continue an existing session
@@ -366,7 +367,8 @@ async def initialize(request: InitializeRequest):
         ENV = PokemonEnvironment(
             rom_path=ROM_PATH,
             headless=request.headless,
-            sound=request.sound
+            sound=request.sound,
+            streaming=request.streaming
         )
         logger.info("env initialized")
         

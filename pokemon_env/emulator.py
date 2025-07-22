@@ -5,6 +5,7 @@ from collections import deque
 import heapq
 from typing import Dict, Any
 import time
+import threading
 
 from .memory_reader import PokemonRedReader, StatusCondition
 from PIL import Image
@@ -14,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 class Emulator:
-    def __init__(self, rom_path, headless=True, sound=False):
+    def __init__(self, rom_path, headless=True, sound=False, streaming=False):
         if headless:
             self.pyboy = PyBoy(
                 rom_path,
@@ -27,6 +28,9 @@ class Emulator:
                 cgb=True,
                 sound=sound,
             )
+        
+        # Streaming mode flag
+        self.streaming = streaming
 
     def tick(self, frames):
         """Advance the emulator by the specified number of frames."""
@@ -39,7 +43,11 @@ class Emulator:
         self.pyboy.set_emulation_speed(0)
         for _ in range(60):
             self.tick(60)
-        self.pyboy.set_emulation_speed(5)
+
+        self.pyboy.set_emulation_speed(speed := 1 if self.streaming else 5)
+        logger.info(
+            f"Emulator initialized in {'streaming' if self.streaming else 'traditional'} mode at {speed}x speed"
+        )
 
     def get_screenshot(self):
         """Get the current screenshot."""
@@ -99,6 +107,7 @@ class Emulator:
                 results.append(f"Invalid button: {button}")
                 continue
                 
+            # Simple button operations
             self.pyboy.button_press(button)
             self.tick(10)   # Press briefly
             self.pyboy.button_release(button)

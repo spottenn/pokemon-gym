@@ -973,6 +973,42 @@ class AIServerAgent:
             
             return next_state
         
+        # === STREAMING THOUGHTS FOR OBS INTEGRATION ===
+        # Extract and write the raw LLM response to thoughts file for live streaming
+        try:
+            thought_text = ""
+            if self.provider in ["openai", "openrouter", "grok", "xai"]:
+                if hasattr(response, 'choices') and response.choices:
+                    thought_text = response.choices[0].message.content
+            elif self.provider == "gemini":
+                if hasattr(response, 'choices') and response.choices:
+                    thought_text = response.choices[0].message.content
+            elif self.provider == "claude":
+                if hasattr(response, 'content') and response.content:
+                    # Extract text content from Claude's response blocks
+                    text_blocks = [block.text for block in response.content if hasattr(block, 'type') and block.type == "text"]
+                    thought_text = "\n".join(text_blocks)
+            elif self.provider == "ollama":
+                if hasattr(response, 'choices') and response.choices:
+                    thought_text = response.choices[0].message.content
+                elif hasattr(response, 'message') and hasattr(response.message, 'content'):
+                    thought_text = response.message.content
+                elif hasattr(response, 'content'):
+                    thought_text = response.content
+
+            # Write thoughts to streaming file (overwrite mode for real-time display)
+            if thought_text:
+                # Create a streaming thoughts file for OBS
+                streaming_file = "thoughts.txt"
+                with open(streaming_file, 'w', encoding='utf-8') as f:
+                    f.write(f"=== AI Thoughts - Step {self.step_count} ===\n\n")
+                    f.write(thought_text)
+                    f.write(f"\n\n=== Location: {state.get('location', 'Unknown')} ===")
+                
+        except Exception as streaming_error:
+            logger.error(f"Failed to write streaming thoughts: {streaming_error}")
+        # === END STREAMING THOUGHTS ===
+        
         # Extract action data and process response based on provider
         action_data = {}
         assistant_content = []
