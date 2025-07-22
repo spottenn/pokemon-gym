@@ -522,6 +522,7 @@ class PokemonSingleAgent:
         os.makedirs(log_dir, exist_ok=True)
         
         self.log_dir = log_dir
+        self._explicit_session_id = session_id  # Track if session was explicitly provided
         self.session_id = session_id or datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         
         # Statistics tracking
@@ -554,6 +555,47 @@ class PokemonSingleAgent:
         self.graph = self._setup_graph()
         
         logger.info(f"Pokemon Single Agent initialized with session ID: {self.session_id}, log level: {log_level}")
+    
+    def _get_latest_session(self) -> Optional[str]:
+        """
+        Find the most recent session that has saved states.
+        
+        Returns:
+            Session ID of the latest session with saved states, or None
+        """
+        import glob
+        
+        sessions_pattern = "gameplay_sessions/session_*"
+        sessions = glob.glob(sessions_pattern)
+        
+        if not sessions:
+            return None
+        
+        # Sort by modification time to get the most recent
+        latest_session_dir = max(sessions, key=os.path.getmtime)
+        session_id = os.path.basename(latest_session_dir)
+        
+        # Check if this session has saved states
+        autosave_path = os.path.join(latest_session_dir, "autosave.state")
+        final_state_path = os.path.join(latest_session_dir, "final_state.state")
+        
+        if os.path.exists(autosave_path) or os.path.exists(final_state_path):
+            logger.info(f"Found resumable session: {session_id}")
+            return session_id
+        
+        return None
+    
+    def _should_auto_resume(self) -> bool:
+        """
+        Check if we should automatically resume an existing session.
+        This is enabled when no specific session was requested and there's an existing session.
+        """
+        # Only auto-resume if no specific session was requested
+        if self._explicit_session_id:
+            return False
+            
+        # Check if there's a resumable session
+        return self._get_latest_session() is not None
     
     def _get_agent_prompt(self) -> str:
         """
@@ -1727,13 +1769,22 @@ What can you observe in this image? Be specific about:
         Returns:
             Initial game state
         """
+        # Check if we should auto-resume an existing session
+        resume_session_id = None
+        if self._should_auto_resume():
+            resume_session_id = self._get_latest_session()
+            if resume_session_id:
+                logger.info(f"Auto-resuming session: {resume_session_id}")
+                self.session_id = resume_session_id
+                load_autosave = True  # Enable autosave loading when resuming
+        
         # Initialize the environment
         game_state = self.pokemon_server.initialize(
             headless=headless,
             sound=sound,
             load_state_file=load_state_file,
             load_autosave=load_autosave,
-            session_id=self.session_id
+            session_id=resume_session_id or self.session_id
         )
         
         # Update state
