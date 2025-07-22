@@ -1,0 +1,7 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Server&amp;Agent" type="CompoundRunConfigurationType">
+    <toRun name="server.evaluator_server" type="PythonConfigurationType" />
+    <toRun name="vision_agent" type="PythonConfigurationType" />
+    <method v="2" />
+  </configuration>
+</component>
