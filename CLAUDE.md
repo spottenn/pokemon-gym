@@ -31,26 +31,14 @@ This project uses `.venv` for dependency isolation.
 For the first setup with new instances of the repo (likely already done for you):
 
 ```bash
-python -m venv .venv
-
-# Activate virtual environment
-.venv\Scripts\activate  # Windows
-source .venv/bin/activate  # Linux/Mac
+py -3.11 -m venv .venv
 
 # Install dependencies
 pip install -r requirements.txt
 ```
 
-For each new session:
+The virtual environment is automatically activated via Claude Code hooks configuration.
 
-```bash
-# Activate virtual environment for first bash call of the coding session
-.venv\Scripts\activate  # Windows
-source .venv/bin/activate  # Linux/Mac
-
-# Run commands on subsequent bash calls. eg.:
-python -m server.evaluator_server
-```
 
 ### Environment Variables
 Copy `.env.example` to `.env` and configure API keys:

@@ -1,28 +1,13 @@
 {
   "permissions": {
     "allow": [
-      "Bash(git revert:*)",
-      "Bash(source:*)",
-      "Bash(python:*)",
-      "Bash(git add:*)",
-      "Bash(git commit:*)",
-      "Bash(timeout:*)",
-      "Bash(mkdir:*)",
-      "Bash(winget install:*)",
-      "Bash(ollama list:*)",
-      "Bash(ollama run:*)",
-      "Bash(ollama ps:*)",
-      "Bash(.venvScriptsactivate)",
-      "Bash(\".venv\\Scripts\\activate\")",
-      "Bash(nvidia-smi:*)",
-      "Bash(ollama stop:*)",
-      "Bash(ollama show:*)",
-      "Bash(set OLLAMA_NUM_PARALLEL=1)",
-      "Bash(set OLLAMA_MAX_LOADED_MODELS=1)",
-      "Bash(set OLLAMA_FLASH_ATTENTION=1)",
-      "WebFetch(domain:github.com)",
-      "WebFetch(domain:markaicode.com)"
+      "Bash(pip install:*)"
     ],
     "deny": []
+  },
+  "hooks": {
+    "PreToolUse": {
+      "Bash": ".venv\\Scripts\\activate"
+    }
   }
 }
