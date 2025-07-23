@@ -128,6 +128,20 @@ class LiteLLMProvider:
             logger.error(f"Error in LiteLLM completion: {e}")
             raise
     
+    def generate(self, prompt: str, **kwargs) -> str:
+        """
+        Generate a response from a simple text prompt
+        
+        Args:
+            prompt: The input prompt as a string
+            **kwargs: Additional parameters for the completion
+            
+        Returns:
+            The AI response as a string
+        """
+        messages = [{"role": "user", "content": prompt}]
+        return self.complete(messages, **kwargs)
+    
     async def acomplete(self, messages: List[Dict[str, str]], **kwargs) -> str:
         """
         Async version of complete()

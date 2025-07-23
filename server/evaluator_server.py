@@ -241,6 +241,40 @@ def log_response(response: GameStateResponse, action_type: str, action_details: 
         logger.error(f"Error logging to CSV: {e}")
 
 
+def build_game_state_response(execution_time: float = 0.0) -> GameStateResponse:
+    """Build a GameStateResponse from current environment state."""
+    global ENV, EVALUATOR
+    
+    if ENV is None:
+        raise HTTPException(status_code=404, detail="Environment not initialized")
+    
+    # Get current game state from environment
+    state = ENV.state
+    
+    # Get collision map and valid moves
+    collision_map = ENV.get_collision_map()
+    valid_moves = ENV.get_valid_moves()
+    
+    # Build and return the response
+    return GameStateResponse(
+        player_name=state.player_name,
+        rival_name=state.rival_name,
+        money=state.money,
+        location=state.location,
+        coordinates=list(state.coordinates),  # Convert tuple to list
+        badges=state.badges,
+        valid_moves=valid_moves,
+        inventory=state.inventory,
+        dialog=state.dialog,
+        pokemons=state.pokemons,
+        screenshot_base64=state.screenshot_base64,
+        collision_map=collision_map,
+        step_number=ENV.steps_taken,
+        execution_time=execution_time,
+        score=EVALUATOR.total_score if EVALUATOR else 0.0
+    )
+
+
 def force_stop_session():
     """Force stop the current session after timeout."""
     global ENV, CSV_FILE, CSV_WRITER, EVALUATOR, SESSION_START_TIME, SESSION_TIMER
@@ -538,28 +572,8 @@ async def take_action(request: ActionRequest):
         # Execute action
         state = ENV.step(action)
         
-        # Get collision map and valid moves
-        collision_map = ENV.get_collision_map()
-        valid_moves = ENV.get_valid_moves()
-        
-        # Prepare response
-        response = GameStateResponse(
-            player_name=state.player_name,
-            rival_name=state.rival_name,
-            money=state.money,
-            location=state.location,
-            coordinates=list(state.coordinates),  # Convert tuple to list
-            badges=state.badges,
-            valid_moves=state.valid_moves,
-            inventory=state.inventory,
-            dialog=state.dialog,
-            pokemons=state.pokemons,
-            screenshot_base64=state.screenshot_base64,
-            collision_map=collision_map,
-            step_number=ENV.steps_taken,
-            execution_time=execution_time,  # Use the calculated time
-            score=EVALUATOR.total_score if EVALUATOR else 0.0  # Add current score
-        )
+        # Prepare response using shared function
+        response = build_game_state_response(execution_time)
         
         # Log the action and response
         log_response(response, request.action_type, action_details)
@@ -627,39 +641,11 @@ async def get_status():
     }
 
 
-@app.get("/game_state")
+@app.get("/game_state", response_model=GameStateResponse)
 async def get_game_state():
     """Get the current game state for dashboard monitoring."""
-    global ENV, EVALUATOR
-    
-    if ENV is None:
-        raise HTTPException(status_code=404, detail="Environment not initialized")
-    
     try:
-        # Get current game state from environment
-        state = ENV.state
-        
-        # Add evaluator information if available
-        score_info = {}
-        if EVALUATOR:
-            score_info = {
-                "score": EVALUATOR.total_score,
-                "pokemon_count": len(EVALUATOR.pokemon_seen),
-                "badges_count": len(EVALUATOR.badges_earned),
-                "locations_count": len(EVALUATOR.locations_visited)
-            }
-        
-        return {
-            "location": state.location,
-            "coordinates": list(state.coordinates),
-            "money": state.money,
-            "badges": state.badges,
-            "pokemon": state.pokemons,
-            "inventory": state.inventory,
-            "dialog": state.dialog,
-            "step_number": ENV.steps_taken,
-            **score_info
-        }
+        return build_game_state_response()
     except Exception as e:
         logger.error(f"Error getting game state: {e}")
         raise HTTPException(status_code=500, detail=f"Error getting game state: {str(e)}")
