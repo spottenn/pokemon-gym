@@ -2,7 +2,6 @@ import argparse
 import logging
 import time
 import os
-import sys
 import json
 import datetime
 import random
@@ -12,9 +11,6 @@ import base64
 import io
 from PIL import Image
 from dotenv import load_dotenv
-
-# Add parent directory to path for imports
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Load environment variables from .env file
 load_dotenv()
@@ -27,9 +23,13 @@ from langchain_core.runnables import Runnable
 from pydantic import BaseModel, Field
 from langgraph.graph import StateGraph, END
 
-# Import our unified LLM provider
-from llm_provider import create_llm_provider
-from session_manager import SessionManager
+# LLM provider imports
+from anthropic import Anthropic
+from openai import OpenAI
+import google.generativeai as genai
+from langchain_anthropic import ChatAnthropic
+from langchain_openai import ChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 
 # Configure logging with more detailed formatting
 logging.basicConfig(
@@ -204,6 +204,118 @@ class PokemonAgentState(BaseModel):
         return [memory for _, memory in relevant_memories[:max_results]]
 
 # LLM Provider configuration and model selection
+class LLMProvider:
+    """Handles interaction with different LLM providers"""
+    
+    def __init__(
+        self, 
+        provider: str = "claude",
+        model_name: Optional[str] = None,
+        temperature: float = 0.7,
+        max_tokens: int = 1500
+    ):
+        self.provider = provider.lower()
+        self.temperature = temperature
+        self.max_tokens = max_tokens
+        
+        # Initialize the appropriate client based on provider
+        if self.provider == "claude":
+            api_key = os.getenv("ANTHROPIC_API_KEY")
+            if not api_key:
+                raise ValueError("ANTHROPIC_API_KEY environment variable not set")
+            self.client = Anthropic(api_key=api_key)
+            self.model_name = model_name or "claude-3-7-sonnet-20250219"
+            logger.info(f"Using Claude provider with model: {self.model_name}")
+        
+        elif self.provider == "openai":
+            api_key = os.getenv("OPENAI_API_KEY")
+            if not api_key:
+                raise ValueError("OPENAI_API_KEY environment variable not set")
+            self.client = OpenAI(api_key=api_key)
+            self.model_name = model_name or "gpt-4o"
+            logger.info(f"Using OpenAI provider with model: {self.model_name}")
+        
+        elif self.provider == "openrouter":
+            api_key = os.getenv("OPENROUTER_API_KEY")
+            if not api_key:
+                raise ValueError("OPENROUTER_API_KEY environment variable not set")
+            self.client = OpenAI(
+                api_key=api_key,
+                base_url="https://openrouter.ai/api/v1"
+            )
+            self.model_name = model_name or "meta-llama/llama-4-maverick"
+            logger.info(f"Using OpenRouter provider with model: {self.model_name}")
+        
+        elif self.provider == "gemini":
+            api_key = os.getenv("GOOGLE_API_KEY")
+            if not api_key:
+                raise ValueError("GOOGLE_API_KEY environment variable not set")
+            genai.configure(api_key=api_key)
+            self.model_name = model_name or "gemini-2.5-flash-lite-preview-06-17"
+            self.generation_config = {
+                "temperature": temperature,
+                "max_output_tokens": max_tokens,
+                "top_p": 0.95,
+            }
+            self.client = genai.GenerativeModel(
+                model_name=self.model_name,
+                generation_config=self.generation_config
+            )
+            logger.info(f"Using Gemini provider with model: {self.model_name}")
+        
+        elif self.provider == "ollama":
+            # Ollama doesn't require API keys, just ensure the service is running locally
+            self.client = None  # Not needed for LangChain ChatOpenAI integration
+            self.model_name = model_name or "gemma3"  # Default to llava multimodal model
+            logger.info(f"Using Ollama provider with model: {self.model_name}")
+            logger.info("Note: Ensure Ollama is running locally on http://localhost:11434")
+        
+        else:
+            raise ValueError(f"Unsupported provider: {self.provider}. Choose 'claude', 'openai', 'openrouter', 'gemini', or 'ollama'")
+    
+    def get_llm(self) -> Runnable:
+        """Returns a LangChain-compatible LLM interface"""
+        # Create the appropriate LLM based on provider
+        if self.provider == "claude":
+            return ChatAnthropic(
+                model=self.model_name,
+                temperature=self.temperature,
+                max_tokens=self.max_tokens,
+                anthropic_api_key=os.getenv("ANTHROPIC_API_KEY")
+            )
+        
+        elif self.provider in ["openai", "openrouter", "ollama"]:
+            # For OpenRouter, we use OpenAI's client with a different base URL
+            # For Ollama, we use OpenAI's client with local Ollama endpoint
+            if self.provider == "openrouter":
+                base_url = "https://openrouter.ai/api/v1"
+                api_key = os.getenv("OPENROUTER_API_KEY")
+            elif self.provider == "ollama":
+                base_url = "http://localhost:11434/v1"
+                api_key = "ollama"  # Required but unused for Ollama
+            else:  # openai
+                base_url = None
+                api_key = os.getenv("OPENAI_API_KEY")
+            
+            return ChatOpenAI(
+                model=self.model_name,
+                temperature=self.temperature,
+                max_tokens=self.max_tokens,
+                openai_api_key=api_key,
+                base_url=base_url
+            )
+        
+        elif self.provider == "gemini":
+            return ChatGoogleGenerativeAI(
+                model=self.model_name,
+                temperature=self.temperature,
+                max_output_tokens=self.max_tokens,
+                google_api_key=os.getenv("GOOGLE_API_KEY"),
+                convert_system_message_to_human=True  # Gemini doesn't natively support system messages
+            )
+            
+        else:
+            raise ValueError(f"Unsupported provider: {self.provider}")
 
 # Server interface for Pokemon environment
 class PokemonServerInterface:
@@ -429,19 +541,15 @@ class PokemonSingleAgent:
         # Initialize state
         self.state = PokemonAgentState()
         
-        # Create LLM provider using LiteLLM
-        self.llm_provider = create_llm_provider(
+        # Create LLM provider
+        self.llm_provider = LLMProvider(
             provider=provider,
             model_name=model_name,
-            temperature=temperature,
-            use_langchain=True
+            temperature=temperature
         )
         
         # Create Pokemon server interface
         self.pokemon_server = PokemonServerInterface(server_url=server_url)
-        
-        # Create session manager
-        self.session_manager = SessionManager()
         
         # Log file for agent thinking
         self.log_filename = os.path.join(log_dir, f"agent_log_{self.session_id}.jsonl")
@@ -611,7 +719,7 @@ What can you observe in this image? Be specific about:
                     )
                     
                     # Get LLM analysis of the screenshot
-                    response = self.llm_provider.invoke([SystemMessage(content=self._get_agent_prompt()), human_message])
+                    response = self.llm_provider.get_llm().invoke([SystemMessage(content=self._get_agent_prompt()), human_message])
                     
                     # Add visual analysis to key info
                     key_info["visual_analysis"] = response.content
@@ -713,7 +821,7 @@ What can you observe in this image? Be specific about:
                     messages.append(AIMessage(content=content))
             
             # Get the LLM
-            llm = self.llm_provider
+            llm = self.llm_provider.get_llm()
             
             # Log memory status
             logger.info("==== MEMORY STATUS ====")
@@ -1679,25 +1787,14 @@ What can you observe in this image? Be specific about:
         Returns:
             Initial game state
         """
-        # Set up session management
+        # Check if we should auto-resume an existing session
         resume_session_id = None
         if self._should_auto_resume():
-            latest_session = self.session_manager.get_latest_session()
-            if latest_session:
-                logger.info(f"Auto-resuming session: {latest_session}")
-                self.session_id = latest_session
-                self.session_manager.load_session(latest_session)
-                resume_session_id = latest_session
-                load_autosave = True
-        else:
-            # Create or load specified session
-            if self.session_id:
-                if not self.session_manager.load_session(self.session_id):
-                    # Session doesn't exist, create it
-                    self.session_manager.create_session(self.session_id)
-            else:
-                # Create new session
-                self.session_id = self.session_manager.create_session()
+            resume_session_id = self._get_latest_session()
+            if resume_session_id:
+                logger.info(f"Auto-resuming session: {resume_session_id}")
+                self.session_id = resume_session_id
+                load_autosave = True  # Enable autosave loading when resuming
         
         # Initialize the environment
         game_state = self.pokemon_server.initialize(

@@ -117,6 +117,7 @@ class AIServerAgent:
                  max_tokens: int = 4000,
                  max_history: int = 30,
                  log_file: str = "agent_log.jsonl",
+                 thoughts_file: str = "thoughts.txt",
                  max_retries: int = 5,
                  retry_delay: float = 1.0):
         """
@@ -130,6 +131,7 @@ class AIServerAgent:
             max_tokens: Maximum tokens for Claude to generate
             max_history: Maximum number of messages to keep in history
             log_file: File to save generated content
+            thoughts_file: File to save AI thoughts for streaming (overwritten each step)
             max_retries: Maximum number of retries for API calls
             retry_delay: Base delay between retries in seconds
         """
@@ -188,8 +190,17 @@ class AIServerAgent:
                 generation_config=self.generation_config
             )
             logger.info(f"Using Gemini provider with model: {self.model_name}")
+        elif self.provider == "ollama":
+            # Ollama doesn't require API keys, just ensure the service is running locally
+            self.client = OpenAI(
+                api_key="ollama",  # Required but unused for Ollama
+                base_url="http://localhost:11434/v1"
+            )
+            self.model_name = model_name or "PetrosStav/gemma3-tools:4b"
+            logger.info(f"Using Ollama provider with model: {self.model_name}")
+            logger.info("Note: Ensure Ollama is running locally on http://localhost:11434")
         else:
-            raise ValueError(f"Unsupported provider: {self.provider}. Choose 'claude', 'openai', 'openrouter', or 'gemini'")
+            raise ValueError(f"Unsupported provider: {self.provider}. Choose 'claude', 'openai', 'openrouter', 'gemini', or 'ollama'")
         
         # Chat history
         self.message_history = []
@@ -207,6 +218,10 @@ class AIServerAgent:
         if log_dir and not os.path.exists(log_dir):
             os.makedirs(log_dir, exist_ok=True)
         logger.info(f"Will log all generated content to: {self.log_file}")
+        
+        # Streaming thoughts file for OBS integration
+        self.thoughts_file = thoughts_file
+        logger.info(f"Will stream AI thoughts to: {self.thoughts_file}")
         
         # Added for OpenAI
         self.pending_tool_responses = []
@@ -611,10 +626,10 @@ class AIServerAgent:
                     if logger.isEnabledFor(logging.DEBUG):
                         logger.debug(f"Messages for {self.provider}: {json.dumps(openai_messages, indent=2)}")
                     
-                    # For OpenAI, we'll use text mode instead of tools
+                    # For OpenAI and some models, we'll use text mode instead of tools
                     tools = []
-                    if self.provider != "openai" and self.provider != "openrouter":
-                        # Only add tools for non-OpenAI providers
+                    if self.provider not in ["openai", "openrouter"]:
+                        # Add tools for providers that support them
                         tools = []
                         for tool in AVAILABLE_TOOLS:
                             tools.append({
@@ -999,8 +1014,7 @@ class AIServerAgent:
             # Write thoughts to streaming file (overwrite mode for real-time display)
             if thought_text:
                 # Create a streaming thoughts file for OBS
-                streaming_file = "thoughts.txt"
-                with open(streaming_file, 'w', encoding='utf-8') as f:
+                with open(self.thoughts_file, 'w', encoding='utf-8') as f:
                     f.write(f"=== AI Thoughts - Step {self.step_count} ===\n\n")
                     f.write(thought_text)
                     f.write(f"\n\n=== Location: {state.get('location', 'Unknown')} ===")
@@ -1530,12 +1544,13 @@ def main():
     parser.add_argument("--steps", type=int, default=1000000, help="Number of steps to run")
     parser.add_argument("--headless", action="store_true", help="Run headless")
     parser.add_argument("--sound", action="store_true", help="Enable sound")
-    parser.add_argument("--provider", type=str, default="claude", choices=["claude", "openai", "openrouter", "gemini"], 
-                      help="LLM provider to use (claude, openai, openrouter, gemini)")
+    parser.add_argument("--provider", type=str, default="ollama", choices=["claude", "openai", "openrouter", "gemini", "ollama"], 
+                      help="LLM provider to use (claude, openai, openrouter, gemini, ollama)")
     parser.add_argument("--model", type=str, default=None, help="Model name for the selected provider")
     parser.add_argument("--temperature", type=float, default=1.0, help="Temperature parameter for Claude")
     parser.add_argument("--max-tokens", type=int, default=4000, help="Maximum tokens for Claude to generate")
     parser.add_argument("--log-file", type=str, default="agent_log.jsonl", help="File to save agent logs")
+    parser.add_argument("--thoughts-file", type=str, default="thoughts.txt", help="File to save AI thoughts for streaming (overwritten each step)")
     parser.add_argument("--max-retries", type=int, default=5, help="Maximum retries for API calls")
     parser.add_argument("--retry-delay", type=float, default=1.0, help="Base delay between retries in seconds")
     parser.add_argument("--load-state", type=str, help="Path to a saved state file to load")
@@ -1552,6 +1567,7 @@ def main():
         temperature=args.temperature,
         max_tokens=args.max_tokens,
         log_file=args.log_file,
+        thoughts_file=args.thoughts_file,
         max_retries=args.max_retries,
         retry_delay=args.retry_delay
     )

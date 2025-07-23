@@ -3,6 +3,7 @@ anthropic>=0.39.0  # For Claude API
 pyboy==2.2.0       # For Pokemon emulator
 openai>=1.14.0     # For GPT-4o API
 google-generativeai>=0.4.0  # For Gemini API
+litellm>=1.33.0    # For unified LLM API access
 langgraph>=0.3.28  # For agent workflow graph - Latest version
 langchain>=0.2.13  # For LangChain core functionality
 langchain-core>=0.2.27  # For LangChain core components

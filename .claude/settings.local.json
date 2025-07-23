@@ -1,7 +1,21 @@
 {
   "permissions": {
     "allow": [
-      "Bash(pip install:*)"
+      "Bash(pip install:*)",
+      "WebFetch(domain:docs.litellm.ai)",
+      "Bash(python:*)",
+      "Bash(pkill:*)",
+      "Bash(taskkill:*)",
+      "Bash(ollama:*)",
+      "Bash(timeout 30 tail -f thoughts.txt)",
+      "Bash(curl:*)",
+      "Bash(cp:*)",
+      "Bash(cmd /c:*)",
+      "Bash(where python)",
+      "Bash(where obs64)",
+      "Bash(where obs)",
+      "Bash(ls:*)",
+      "Bash(dir:*)"
     ],
     "deny": []
   },
