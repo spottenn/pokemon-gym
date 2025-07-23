@@ -627,6 +627,44 @@ async def get_status():
     }
 
 
+@app.get("/game_state")
+async def get_game_state():
+    """Get the current game state for dashboard monitoring."""
+    global ENV, EVALUATOR
+    
+    if ENV is None:
+        raise HTTPException(status_code=404, detail="Environment not initialized")
+    
+    try:
+        # Get current game state from environment
+        state = ENV.state
+        
+        # Add evaluator information if available
+        score_info = {}
+        if EVALUATOR:
+            score_info = {
+                "score": EVALUATOR.total_score,
+                "pokemon_count": len(EVALUATOR.pokemon_seen),
+                "badges_count": len(EVALUATOR.badges_earned),
+                "locations_count": len(EVALUATOR.locations_visited)
+            }
+        
+        return {
+            "location": state.location,
+            "coordinates": list(state.coordinates),
+            "money": state.money,
+            "badges": state.badges,
+            "pokemon": state.pokemons,
+            "inventory": state.inventory,
+            "dialog": state.dialog,
+            "step_number": ENV.steps_taken,
+            **score_info
+        }
+    except Exception as e:
+        logger.error(f"Error getting game state: {e}")
+        raise HTTPException(status_code=500, detail=f"Error getting game state: {str(e)}")
+
+
 @app.post("/stop")
 async def stop_environment():
     """Stop the environment."""

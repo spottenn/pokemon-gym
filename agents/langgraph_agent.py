@@ -1153,15 +1153,27 @@ What can you observe in this image? Be specific about:
             for location, info in state.known_locations.items():
                 prompt_parts.append(f"- {location} (visited {info.get('visit_count', 1)} times)")
         
+        # Add visual analysis if available
+        if hasattr(state, 'current_visual_analysis') and state.current_visual_analysis:
+            prompt_parts.extend([
+                "",
+                "# VISUAL ANALYSIS (What you can see on screen)",
+                state.current_visual_analysis,
+                "IMPORTANT: Use this visual information to understand what's actually happening in the game!"
+            ])
+        
         # Add request for thinking, decision, and memory updates
         prompt_parts.extend([
             "",
             "# Instructions",
-            "Based on the information above:",
-            "1. OBSERVE: What do you see in the current game state? What's happening?",
-            "2. THINK: Consider your options and strategy based on current observations and short-term memory.",
-            "3. DECIDE: Choose a specific action to take.",
+            "Based on the information above (especially the visual analysis):",
+            "1. OBSERVE: What do you see in the current game state? What's happening on screen?",
+            "2. THINK: Consider your options and strategy based on current observations, visual analysis, and short-term memory.",
+            "3. DECIDE: Choose a specific action to take based on what you can actually see.",
             "4. MEMORY: Note any information worth remembering.",
+            "",
+            "CRITICAL: Always refer to the visual analysis to understand what's actually on screen.",
+            "Don't assume locations or situations - look at what the visual analysis tells you!",
             "",
             "Provide your thinking in a natural way, without worrying about strict section formatting.",
             "Finally, conclude with a specific action in this format: ACTION: [press_key|wait] [button|frames]",

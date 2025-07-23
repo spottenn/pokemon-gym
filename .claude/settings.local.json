@@ -15,7 +15,13 @@
       "Bash(where obs64)",
       "Bash(where obs)",
       "Bash(ls:*)",
-      "Bash(dir:*)"
+      "Bash(dir:*)",
+      "Bash(timeout:*)",
+      "Bash(/dev/null)",
+      "Bash(cat:*)",
+      "Bash(pip --version)",
+      "Bash(where pip)",
+      "Bash(echo $VIRTUAL_ENV)"
     ],
     "deny": []
   },
