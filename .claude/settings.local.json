@@ -22,7 +22,16 @@
       "Bash(pip --version)",
       "Bash(where pip)",
       "Bash(echo $VIRTUAL_ENV)",
-      "Bash(curl -X POST http://localhost:8090/initialize -H \"Content-Type: application/json\" -d \"{\"\"headless\"\": true, \"\"sound\"\": false, \"\"streaming\"\": true}\" -s -o init_response.json)"
+      "Bash(curl -X POST http://localhost:8090/initialize -H \"Content-Type: application/json\" -d \"{\"\"headless\"\": true, \"\"sound\"\": false, \"\"streaming\"\": true}\" -s -o init_response.json)",
+      "Bash(powershell:*)",
+      "Bash(rmdir:*)",
+      "Bash(gh repo create:*)",
+      "Bash(mkdir:*)",
+      "Bash(git init:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git submodule add:*)",
+      "Bash(npm install:*)"
     ],
     "deny": []
   },

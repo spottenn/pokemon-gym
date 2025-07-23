@@ -101,8 +101,6 @@ class VisionAgent:
         """Create a vision-focused prompt with chain-of-thought reasoning."""
         prompt = f"""You are playing Pokemon Red. Look at the screenshot and decide what to do next.
 
-SCREENSHOT: {screenshot_b64}
-
 CURRENT LOCATION: {location}
 
 RECENT ACTIONS: {', '.join(recent_actions[-5:]) if recent_actions else 'None'}
@@ -274,11 +272,11 @@ Remember: Think carefully about what you see before acting. Your thoughts should
             recent_action_types = [a.get("type", "unknown") for a in self.recent_actions]
             prompt = self.get_simple_prompt(screenshot_b64, location, recent_action_types)
             
-            # Get LLM response
+            # Get LLM response with screenshot as image
             response = None
             for attempt in range(self.max_retries):
                 try:
-                    response = self.llm.generate(prompt)
+                    response = self.llm.generate(prompt, image_b64=screenshot_b64)
                     break
                 except Exception as e:
                     logger.warning(f"LLM attempt {attempt + 1} failed: {e}")

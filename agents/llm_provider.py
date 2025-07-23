@@ -95,22 +95,44 @@ class LiteLLMProvider:
         else:
             raise ValueError(f"Unsupported provider: {self.provider}")
     
-    def complete(self, messages: List[Dict[str, str]], **kwargs) -> str:
+    def complete(self, messages: List[Dict[str, Any]], **kwargs) -> str:
         """
         Complete a chat conversation using LiteLLM
         
         Args:
-            messages: List of message dicts with 'role' and 'content' keys
+            messages: List of message dicts with 'role' and 'content' keys.
+                     Content can be a string or a list for multimodal messages.
             **kwargs: Additional parameters for the completion
             
         Returns:
             The AI response as a string
         """
         try:
+            # Process messages to handle vision content
+            processed_messages = []
+            for message in messages:
+                processed_message = {"role": message["role"]}
+                
+                # Handle multimodal content (text + images)
+                if isinstance(message["content"], dict) and "image" in message["content"]:
+                    # This is a vision message with text and image
+                    processed_message["content"] = [
+                        {"type": "text", "text": message["content"]["text"]},
+                        {
+                            "type": "image_url", 
+                            "image_url": {"url": f"data:image/png;base64,{message['content']['image']}"}
+                        }
+                    ]
+                else:
+                    # Regular text-only message
+                    processed_message["content"] = message["content"]
+                
+                processed_messages.append(processed_message)
+            
             # Merge instance parameters with call-specific parameters
             params = {
                 "model": self.model_name,
-                "messages": messages,
+                "messages": processed_messages,
                 "temperature": kwargs.get("temperature", self.temperature),
                 "max_tokens": kwargs.get("max_tokens", self.max_tokens),
                 **self.kwargs,
@@ -128,21 +150,29 @@ class LiteLLMProvider:
             logger.error(f"Error in LiteLLM completion: {e}")
             raise
     
-    def generate(self, prompt: str, **kwargs) -> str:
+    def generate(self, prompt: str, image_b64: str = None, **kwargs) -> str:
         """
-        Generate a response from a simple text prompt
+        Generate a response from a simple text prompt, optionally with an image
         
         Args:
             prompt: The input prompt as a string
+            image_b64: Optional base64-encoded image for vision models
             **kwargs: Additional parameters for the completion
             
         Returns:
             The AI response as a string
         """
-        messages = [{"role": "user", "content": prompt}]
+        if image_b64:
+            # Create multimodal message with text and image
+            content = {"text": prompt, "image": image_b64}
+        else:
+            # Regular text-only message
+            content = prompt
+            
+        messages = [{"role": "user", "content": content}]
         return self.complete(messages, **kwargs)
     
-    async def acomplete(self, messages: List[Dict[str, str]], **kwargs) -> str:
+    async def acomplete(self, messages: List[Dict[str, Any]], **kwargs) -> str:
         """
         Async version of complete()
         
@@ -154,10 +184,31 @@ class LiteLLMProvider:
             The AI response as a string
         """
         try:
+            # Process messages to handle vision content (same as sync version)
+            processed_messages = []
+            for message in messages:
+                processed_message = {"role": message["role"]}
+                
+                # Handle multimodal content (text + images)
+                if isinstance(message["content"], dict) and "image" in message["content"]:
+                    # This is a vision message with text and image
+                    processed_message["content"] = [
+                        {"type": "text", "text": message["content"]["text"]},
+                        {
+                            "type": "image_url", 
+                            "image_url": {"url": f"data:image/png;base64,{message['content']['image']}"}
+                        }
+                    ]
+                else:
+                    # Regular text-only message
+                    processed_message["content"] = message["content"]
+                
+                processed_messages.append(processed_message)
+            
             # Merge instance parameters with call-specific parameters
             params = {
                 "model": self.model_name,
-                "messages": messages,
+                "messages": processed_messages,
                 "temperature": kwargs.get("temperature", self.temperature),
                 "max_tokens": kwargs.get("max_tokens", self.max_tokens),
                 **self.kwargs,

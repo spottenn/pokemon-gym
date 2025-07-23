@@ -1,0 +1,3 @@
+[submodule "streaming-dashboard"]
+	path = streaming-dashboard
+	url = https://github.com/spottenn/pokemon-gym-streaming-dashboard.git

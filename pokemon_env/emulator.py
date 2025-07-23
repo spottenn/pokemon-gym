@@ -41,8 +41,13 @@ class Emulator:
 
     def tick(self, frames):
         """Advance the emulator by the specified number of frames."""
-        for _ in range(frames):
-            self.pyboy.tick()
+        if self.streaming:
+            # Use queued system for streaming mode
+            self.queue_wait(frames)
+        else:
+            # Traditional synchronous operation
+            for _ in range(frames):
+                self.pyboy.tick()
 
     def initialize(self):
         """Initialize the emulator."""
