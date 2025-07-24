@@ -41,43 +41,33 @@ def create_project_instance(agent_id: str, source_dir: Path, parent_dir: Path) -
     
     print(f"Creating project instance: {instance_path}")
     
-    # Copy the entire project
+    # Copy the entire project including .git for version control
+    # Only ignore runtime/build artifacts
     shutil.copytree(source_dir, instance_path, 
-                   ignore=shutil.ignore_patterns('.git', '__pycache__', '*.pyc', '.venv', 'node_modules'))
-    
-    # Copy .env file if it exists
-    env_file = source_dir / '.env'
-    if env_file.exists():
-        shutil.copy2(env_file, instance_path / '.env')
-    
-    # Copy ROM file if it exists
-    rom_file = source_dir / 'Pokemon_Red.gb'
-    if rom_file.exists():
-        shutil.copy2(rom_file, instance_path / 'Pokemon_Red.gb')
+                   ignore=shutil.ignore_patterns('__pycache__', '*.pyc', 'node_modules', '.DS_Store'))
     
     return instance_path
 
-def setup_instance_environment(instance_path: Path) -> bool:
-    """Set up the Python environment for the instance."""
+def setup_instance_environment(instance_path: Path, source_dir: Path) -> bool:
+    """Set up the Python environment for the instance by copying from source."""
     print(f"Setting up environment for {instance_path.name}")
     
-    # Create virtual environment
-    venv_cmd = [sys.executable, '-m', 'venv', str(instance_path / '.venv')]
-    result = subprocess.run(venv_cmd, capture_output=True, text=True)
-    if result.returncode != 0:
-        print(f"Failed to create venv: {result.stderr}")
+    source_venv = source_dir / '.venv'
+    target_venv = instance_path / '.venv'
+    
+    # Check if source has a working venv
+    if not source_venv.exists():
+        print(f"No source virtual environment found at {source_venv}")
+        print("Please ensure the main project has a working .venv with dependencies installed")
         return False
     
-    # Install requirements
-    pip_path = instance_path / '.venv' / 'bin' / 'pip'
-    if not pip_path.exists():
-        pip_path = instance_path / '.venv' / 'Scripts' / 'pip.exe'  # Windows
+    # Remove target venv if it exists (from previous copy)
+    if target_venv.exists():
+        shutil.rmtree(target_venv)
     
-    pip_cmd = [str(pip_path), 'install', '-r', str(instance_path / 'requirements.txt')]
-    result = subprocess.run(pip_cmd, capture_output=True, text=True)
-    if result.returncode != 0:
-        print(f"Failed to install requirements: {result.stderr}")
-        return False
+    # Copy the entire virtual environment
+    print(f"Copying virtual environment from {source_venv}")
+    shutil.copytree(source_venv, target_venv)
     
     return True
 
@@ -164,8 +154,8 @@ def main():
         if not args.skip_setup:
             instance_path = create_project_instance(agent_id, project_root, parent_dir)
             
-            # Setup environment
-            if not setup_instance_environment(instance_path):
+            # Setup environment by copying from source
+            if not setup_instance_environment(instance_path, project_root):
                 print(f"Failed to setup environment for {agent_id}")
                 continue
         else:
