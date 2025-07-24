@@ -28,8 +28,8 @@ from pydantic import BaseModel, Field
 from langgraph.graph import StateGraph, END
 
 # Import our unified LLM provider
-from .llm_provider import create_llm_provider
-from .session_manager import SessionManager
+from agents.llm_provider import create_llm_provider
+from agents.session_manager import SessionManager
 
 # Configure logging with more detailed formatting
 logging.basicConfig(
