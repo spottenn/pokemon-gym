@@ -333,6 +333,11 @@ Remember: Vary your actions based on what you actually see! Don't just press 'a'
         latest_session = self.session_manager.get_latest_session()
         if latest_session:
             logger.info(f"Resuming latest session: {latest_session}")
+            # Load the session data locally
+            if self.session_manager.load_session(latest_session):
+                logger.info(f"Successfully loaded session data for: {latest_session}")
+            else:
+                logger.warning(f"Failed to load session data for: {latest_session}")
             # Initialize with resume
             init_data = {
                 "headless": self.headless,
