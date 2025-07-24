@@ -51,8 +51,8 @@ def get_windows_host_ip() -> str:
     except Exception as e:
         logger.warning(f"Failed to get IP from hostname: {e}")
     
-    # Method 3: Add common WSL2 defaults
-    common_ips = ["172.31.160.1", "172.17.0.1", "192.168.65.1"]
+    # Method 3: Add common defaults (localhost first for Windows compatibility)
+    common_ips = ["127.0.0.1", "172.31.160.1", "172.17.0.1", "192.168.65.1"]
     for ip in common_ips:
         if ip not in candidate_ips:
             candidate_ips.append(ip)
@@ -122,8 +122,8 @@ def get_ollama_endpoint() -> str:
     except Exception:
         pass
     
-    # Add common defaults
-    common_ips = ["172.31.160.1", "172.17.0.1", "192.168.65.1"]
+    # Add common defaults (localhost first for Windows compatibility)
+    common_ips = ["127.0.0.1", "172.31.160.1", "172.17.0.1", "192.168.65.1"]
     for ip in common_ips:
         if ip not in candidate_ips:
             candidate_ips.append(ip)
