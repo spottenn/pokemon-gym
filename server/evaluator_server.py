@@ -543,34 +543,61 @@ async def take_action(request: ActionRequest):
     
     # Create action based on request
     try:
-        if request.action_type == "press_key":
-            if not request.keys:
+        if ENV.emulator.streaming:
+            # In streaming mode, queue the action
+            if request.action_type == "press_key":
+                if not request.keys:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Keys parameter is required for press_key action."
+                    )
+                ENV.emulator.queue_action("press_button", {"button": request.keys[0], "frames": 10}) # Assuming single key press for now
+                action_details = {"keys": request.keys}
+            elif request.action_type == "wait":
+                if not request.frames:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Frames parameter is required for wait action."
+                    )
+                ENV.emulator.queue_action("wait", {"frames": request.frames})
+                action_details = {"frames": request.frames}
+            else:
                 raise HTTPException(
                     status_code=400,
-                    detail="Keys parameter is required for press_key action."
+                    detail=f"Unknown action type: {request.action_type}"
                 )
-            logger.info(f"Creating PressKey action with keys: {request.keys}")
-            action = PressKey(keys=request.keys)
-            action_details = {"keys": request.keys}
-        
-        elif request.action_type == "wait":
-            if not request.frames:
+            # In streaming mode, the emulator is continuously ticking, so we just get the current state
+            state = ENV.state
+        else:
+            # In non-streaming mode, execute the action synchronously
+            if request.action_type == "press_key":
+                if not request.keys:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Keys parameter is required for press_key action."
+                    )
+                logger.info(f"Creating PressKey action with keys: {request.keys}")
+                action = PressKey(keys=request.keys)
+                action_details = {"keys": request.keys}
+            
+            elif request.action_type == "wait":
+                if not request.frames:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Frames parameter is required for wait action."
+                    )
+                
+                action = Wait(frames=request.frames)
+                action_details = {"frames": request.frames}
+            
+            else:
                 raise HTTPException(
                     status_code=400,
-                    detail="Frames parameter is required for wait action."
+                    detail=f"Unknown action type: {request.action_type}"
                 )
             
-            action = Wait(frames=request.frames)
-            action_details = {"frames": request.frames}
-        
-        else:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Unknown action type: {request.action_type}"
-            )
-        
-        # Execute action
-        state = ENV.step(action)
+            # Execute action
+            state = ENV.step(action)
         
         # Prepare response using shared function
         response = build_game_state_response(execution_time)

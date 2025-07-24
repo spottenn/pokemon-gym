@@ -105,25 +105,27 @@ CURRENT LOCATION: {location}
 
 RECENT ACTIONS: {', '.join(recent_actions[-5:]) if recent_actions else 'None'}
 
-Your goal is to progress through the Pokemon Red game. Think step by step about what you see and what you should do.
+Your goal is to progress through the Pokemon Red game. Analyze the screenshot carefully and choose the best action.
 
-THINK ALOUD: First, carefully analyze what you see in the screenshot. What's on screen? Are there any dialogs, menus, or interactive elements? What does the environment look like? Are there any NPCs, items, or obstacles? Based on your recent actions and current situation, what would be the most logical next step to progress in the game?
-
-After thinking through the situation, provide your reasoning and then your action.
+IMPORTANT: Don't just repeat the same action! Look at what's actually on screen:
+- If you see a menu, navigate it properly with up/down/a/b
+- If you see dialogue, read it and respond appropriately 
+- If you see the overworld, move around with directional keys
+- If you're stuck in a loop, try a different approach
 
 Format your response like this:
 
-THOUGHTS: [Your detailed analysis and reasoning about what you see and what you should do next. Be specific about what you observe in the screenshot and why you're choosing your next action. This should be several sentences explaining your decision-making process.]
+THOUGHTS: [Describe what you see in the screenshot. What objects, characters, menus, or text are visible? What is the current game state? Based on this observation, what should you do next and WHY?]
 
-ACTION: press_key a
+ACTION: press_key [button]
 OR
-ACTION: wait 60
+ACTION: wait [frames]
 
 Available actions:
 - press_key: [a, b, start, select, up, down, left, right]  
 - wait: [number of frames, e.g., 60]
 
-Remember: Think carefully about what you see before acting. Your thoughts should show your reasoning process."""
+Remember: Vary your actions based on what you actually see! Don't just press 'a' repeatedly unless you're specifically advancing dialogue."""
 
         return prompt
 
@@ -214,6 +216,8 @@ Remember: Think carefully about what you see before acting. Your thoughts should
     def send_action(self, action: Dict) -> Optional[Dict]:
         """Send action to server and get response."""
         try:
+            # In streaming mode, we send the action and then immediately request the game state
+            # The server will queue the action and return the current state
             response = requests.post(f"{self.server_url}/action", json=action, timeout=30)
             if response.status_code == 200:
                 return response.json()

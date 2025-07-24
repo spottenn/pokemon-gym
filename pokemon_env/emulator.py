@@ -11,167 +11,109 @@ from queue import Queue
 from .memory_reader import PokemonRedReader, StatusCondition
 from PIL import Image
 from pyboy import PyBoy
+from .pyboy_thread import PyBoyThread
 
 logger = logging.getLogger(__name__)
 
 
 class Emulator:
     def __init__(self, rom_path, headless=True, sound=False, streaming=False):
-        self.headless = headless  # Store headless flag
-        
-        if headless:
-            self.pyboy = PyBoy(
-                rom_path,
-                window="null",
-                cgb=True,
-            )
-        else:
-            self.pyboy = PyBoy(
-                rom_path,
-                cgb=True,
-                sound=sound,
-            )
-        
-        # Streaming mode setup  
+        self.rom_path = rom_path
+        self.headless = headless
+        self.sound = sound
         self.streaming = streaming
-        self.streaming_active = False
-        self.streaming_thread = None
-        self.action_queue = Queue()
-        self.emulator_lock = threading.RLock()  # Reentrant lock for thread safety
+        
+        # Initialize PyBoy thread for streaming mode or regular PyBoy for traditional mode
+        self.pyboy_thread = None
+        self.pyboy = None
+        self.emulator_lock = threading.RLock()  # Still used for non-streaming mode
+        
+        # Don't initialize PyBoy here - let initialize() handle it
 
     def tick(self, frames):
         """Advance the emulator by the specified number of frames."""
-        if self.streaming:
-            # Use queued system for streaming mode
-            self.queue_wait(frames)
+        if self.streaming and self.pyboy_thread:
+            # Use PyBoy thread
+            self.pyboy_thread.tick(frames)
         else:
             # Traditional synchronous operation
-            for _ in range(frames):
-                self.pyboy.tick()
+            with self.emulator_lock:
+                for _ in range(frames):
+                    self.pyboy.tick()
 
     def initialize(self):
         """Initialize the emulator."""
-        # Store streaming state but don't start yet for non-headless mode
-        should_stream = self.streaming
-        if not self.headless:
-            # Temporarily disable streaming during initialization for non-headless mode
-            self.streaming = False
-        
-        # Run the emulator for a short time to make sure it's ready
-        self.pyboy.set_emulation_speed(0)
-        for _ in range(60):
-            self.tick(60)
-
-        self.pyboy.set_emulation_speed(speed := 1 if should_stream else 5)
-        logger.info(
-            f"Emulator initialized in {'streaming' if should_stream else 'traditional'} mode at {speed}x speed"
-        )
-        
-        # Restore streaming state and start if enabled
-        self.streaming = should_stream
         if self.streaming:
-            # Add a small delay for non-headless mode to ensure window is fully initialized
-            if not self.headless:
-                import time
-                time.sleep(0.5)  # Give window time to fully initialize
-            self.start_streaming()
+            # Use PyBoy thread for streaming mode - this handles all threading issues
+            logger.info("Initializing emulator in streaming mode with dedicated PyBoy thread")
+            self.pyboy_thread = PyBoyThread()
+            self.pyboy_thread.start(self.rom_path, self.headless, self.sound)
+            # Set reference for compatibility with existing code
+            self.pyboy = self.pyboy_thread
+        else:
+            # Traditional mode - direct PyBoy initialization
+            logger.info("Initializing emulator in traditional mode")
+            if self.headless:
+                self.pyboy = PyBoy(
+                    self.rom_path,
+                    window="null",
+                    cgb=True,
+                )
+            else:
+                self.pyboy = PyBoy(
+                    self.rom_path,
+                    cgb=True,
+                    sound=self.sound,
+                )
+            
+            # Run for a short time to ensure ready
+            self.pyboy.set_emulation_speed(0)
+            for _ in range(60):
+                self.pyboy.tick()
+            self.pyboy.set_emulation_speed(5)  # Fast speed for traditional mode
+        
+        logger.info(f"Emulator initialized in {'streaming' if self.streaming else 'traditional'} mode")
 
     def get_screenshot(self):
         """Get the current screenshot."""
-        with self.emulator_lock:
-            return Image.fromarray(self.pyboy.screen.ndarray)
+        if self.streaming and self.pyboy_thread:
+            # Thread-safe screenshot from PyBoy thread
+            return self.pyboy_thread.get_screen_image()
+        else:
+            # Traditional mode with lock
+            with self.emulator_lock:
+                return Image.fromarray(self.pyboy.screen.ndarray)
 
-    def start_streaming(self):
-        """Start the streaming mode thread."""
-        if self.streaming_active:
-            logger.warning("Streaming already active")
-            return
+    # Removed old streaming methods - now handled by PyBoyThread
+
+    def queue_action(self, action_type: str, data: Dict[str, Any]):
+        """Queue an action for execution in streaming mode."""
+        if self.streaming and self.pyboy_thread:
+            self.pyboy_thread.queue_action(action_type, data)
+        else:
+            logger.warning("Attempted to queue action in non-streaming mode")
             
-        self.streaming_active = True
-        self.streaming_thread = threading.Thread(target=self._streaming_loop, daemon=True)
-        self.streaming_thread.start() 
-        logger.info("Streaming mode activated - emulator running continuously at 1x speed")
-
-    def stop_streaming(self):
-        """Stop the streaming mode thread."""
-        if not self.streaming_active:
-            return
-            
-        self.streaming_active = False
-        if self.streaming_thread and self.streaming_thread.is_alive():
-            self.streaming_thread.join(timeout=1.0)
-        logger.info("Streaming mode deactivated")
-
-    def _streaming_loop(self):
-        """Main loop for continuous emulation in streaming mode."""
-        logger.info("Starting continuous emulation loop at 1x speed")
-        
-        while self.streaming_active:
-            try:
-                # Process any queued actions
-                self._process_action_queue()
-                
-                # Tick the emulator once (60 FPS)
-                with self.emulator_lock:
-                    if self.streaming_active:  # Check again after acquiring lock
-                        self.pyboy.tick()
-                
-                # Sleep to maintain ~60 FPS (16.67ms per frame)
-                time.sleep(1.0 / 60.0)
-            except Exception as e:
-                logger.error(f"Error in streaming loop: {e}")
-                time.sleep(0.1)  # Brief pause to prevent spam
-
-    def _process_action_queue(self):
-        """Process any queued button actions during streaming."""
-        while not self.action_queue.empty():
-            try:
-                action = self.action_queue.get_nowait()
-                self._execute_queued_action(action)
-            except Exception as e:
-                logger.error(f"Error processing queued action: {e}")
-
-    def _execute_queued_action(self, action):
-        """Execute a queued button action."""
-        action_type, data = action
-        
-        with self.emulator_lock:
-            if action_type == "press_button":
-                button = data["button"]
-                frames = data.get("frames", 10)
-                
-                # Press button
-                self.pyboy.button_press(button)
-                # Hold for specified frames
-                for _ in range(frames):
-                    if self.streaming_active:
-                        self.pyboy.tick()
-                # Release button
-                self.pyboy.button_release(button)
-                
-            elif action_type == "wait":
-                frames = data["frames"]
-                for _ in range(frames):
-                    if self.streaming_active:
-                        self.pyboy.tick()
-
     def queue_button_press(self, button, frames=10):
         """Queue a button press for execution in streaming mode."""
-        if self.streaming:
-            self.action_queue.put(("press_button", {"button": button, "frames": frames}))
+        if self.streaming and self.pyboy_thread:
+            self.pyboy_thread.press_button(button, frames)
         else:
             # In non-streaming mode, execute immediately
-            self.pyboy.button_press(button)
-            self.tick(frames)
-            self.pyboy.button_release(button)
+            with self.emulator_lock:
+                self.pyboy.button_press(button)
+                for _ in range(frames):
+                    self.pyboy.tick()
+                self.pyboy.button_release(button)
 
     def queue_wait(self, frames):
         """Queue a wait for execution in streaming mode."""
-        if self.streaming:
-            self.action_queue.put(("wait", {"frames": frames}))
+        if self.streaming and self.pyboy_thread:
+            self.pyboy_thread.tick(frames)
         else:
             # In non-streaming mode, execute immediately
-            self.tick(frames)
+            with self.emulator_lock:
+                for _ in range(frames):
+                    self.pyboy.tick()
 
     def load_state(self, state_filename):
         """
@@ -185,8 +127,12 @@ class Emulator:
             state_data = pickle.load(f)
             # Extract the PyBoy state from the full state data
             pyboy_state_io = io.BytesIO(state_data["pyboy_state"])
-            with self.emulator_lock:
-                self.pyboy.load_state(pyboy_state_io)
+            
+            if self.streaming and self.pyboy_thread:
+                self.pyboy_thread.load_state(pyboy_state_io)
+            else:
+                with self.emulator_lock:
+                    self.pyboy.load_state(pyboy_state_io)
 
     def save_state(self, state_filename):
         """
@@ -197,8 +143,12 @@ class Emulator:
         """
         # Save PyBoy state to a BytesIO object
         pyboy_state_io = io.BytesIO()
-        with self.emulator_lock:
-            self.pyboy.save_state(pyboy_state_io)
+        
+        if self.streaming and self.pyboy_thread:
+            self.pyboy_thread.save_state(pyboy_state_io)
+        else:
+            with self.emulator_lock:
+                self.pyboy.save_state(pyboy_state_io)
         
         # Create a state data dictionary with the PyBoy state
         state_data = {
@@ -704,7 +654,13 @@ class Emulator:
         return memory_dict
 
     def stop(self):
-        # Stop streaming if active
-        if self.streaming:
-            self.stop_streaming()
-        self.pyboy.stop()
+        """Clean up resources."""
+        if self.streaming and self.pyboy_thread:
+            # Stop PyBoy thread
+            self.pyboy_thread.stop()
+            self.pyboy_thread = None
+        elif self.pyboy and not self.streaming:
+            # Stop traditional PyBoy
+            self.pyboy.stop()
+            
+        self.pyboy = None
