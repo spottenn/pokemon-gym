@@ -97,21 +97,18 @@ class VisionAgent:
         logger.info(f"Vision agent initialized with {provider} model: {model_name}")
         logger.info(f"Thoughts will be written to: {thoughts_file}")
 
-    def get_simple_prompt(self, screenshot_b64: str, location: str, recent_actions: List[str]) -> str:
-        """Create a vision-focused prompt with chain-of-thought reasoning."""
-        prompt = f"""You are playing Pokemon Red. Look at the screenshot and decide what to do next.
+    def get_simple_prompt(self, screenshot_b64: str) -> str:
+        """Create a pure vision-focused prompt with chain-of-thought reasoning."""
+        prompt = """You are playing Pokemon Red. Look at the screenshot and decide what to do next.
 
-CURRENT LOCATION: {location}
+Your goal is to progress through the Pokemon Red game. Analyze the screenshot carefully and choose the best action based ONLY on what you can see in the image.
 
-RECENT ACTIONS: {', '.join(recent_actions[-5:]) if recent_actions else 'None'}
-
-Your goal is to progress through the Pokemon Red game. Analyze the screenshot carefully and choose the best action.
-
-IMPORTANT: Don't just repeat the same action! Look at what's actually on screen:
+IMPORTANT: Base your decision entirely on visual information:
 - If you see a menu, navigate it properly with up/down/a/b
 - If you see dialogue, read it and respond appropriately 
 - If you see the overworld, move around with directional keys
-- If you're stuck in a loop, try a different approach
+- If you see a battle screen, choose appropriate battle actions
+- If you see an inventory or Pokemon menu, navigate accordingly
 
 Format your response like this:
 
@@ -125,7 +122,7 @@ Available actions:
 - press_key: [a, b, start, select, up, down, left, right]  
 - wait: [number of frames, e.g., 60]
 
-Remember: Vary your actions based on what you actually see! Don't just press 'a' repeatedly unless you're specifically advancing dialogue."""
+Remember: Make decisions based purely on what you see in the image. Analyze the visual elements carefully to determine the appropriate action."""
 
         return prompt
 
@@ -228,30 +225,26 @@ Remember: Vary your actions based on what you actually see! Don't just press 'a'
             logger.error(f"Error sending action: {e}")
             return None
 
-    def update_thoughts_file(self, thoughts: str, action_desc: str, location: str):
+    def update_thoughts_file(self, thoughts: str, action_desc: str):
         """Update the thoughts file for streaming display."""
         try:
             with open(self.thoughts_file, 'w', encoding='utf-8') as f:
                 f.write(f"=== AI Vision Agent - Step {self.step_count} ===\n\n")
                 
                 if thoughts:
-                    f.write("REASONING:\n")
+                    f.write("VISUAL ANALYSIS:\n")
                     f.write(thoughts)
                     f.write("\n\n")
                 
-                f.write(f"ACTION: {action_desc}\n\n")
-                f.write(f"=== Location: {location} ===\n")
-                f.write(f"=== Last Actions: {', '.join([a.get('type', 'unknown') for a in self.recent_actions[-3:]])} ===")
+                f.write(f"ACTION: {action_desc}\n")
         except Exception as e:
             logger.error(f"Error updating thoughts file: {e}")
 
-    def add_to_memory(self, action_type: str, location: str, observation: str):
-        """Add action and observation to simple memory."""
+    def add_to_memory(self, action_type: str):
+        """Add action to simple memory."""
         memory_entry = {
             "step": self.step_count,
-            "type": action_type,
-            "location": location,
-            "observation": observation
+            "type": action_type
         }
         self.recent_actions.append(memory_entry)
         
@@ -270,11 +263,9 @@ Remember: Vary your actions based on what you actually see! Don't just press 'a'
             
             self.step_count += 1
             screenshot_b64 = game_state.get("screenshot_base64", "")
-            location = game_state.get("location", "Unknown")
             
-            # Create simple prompt
-            recent_action_types = [a.get("type", "unknown") for a in self.recent_actions]
-            prompt = self.get_simple_prompt(screenshot_b64, location, recent_action_types)
+            # Create pure vision prompt - no game state context
+            prompt = self.get_simple_prompt(screenshot_b64)
             
             # Get LLM response with screenshot as image
             response = None
@@ -313,12 +304,12 @@ Remember: Vary your actions based on what you actually see! Don't just press 'a'
                 action_desc += f" {action['frames']}"
             
             # Update thoughts file with reasoning and action
-            self.update_thoughts_file(thoughts or "No thoughts provided", action_desc, location)
+            self.update_thoughts_file(thoughts or "No thoughts provided", action_desc)
             
             # Update memory
-            self.add_to_memory(action_desc, location, f"Moved to {result.get('location', 'unknown')}")
+            self.add_to_memory(action_desc)
             
-            logger.info(f"Step {self.step_count}: {action_desc} in {location}")
+            logger.info(f"Step {self.step_count}: {action_desc}")
             return True
             
         except Exception as e:
