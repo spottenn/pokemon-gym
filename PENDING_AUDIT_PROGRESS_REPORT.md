@@ -28,6 +28,49 @@ Convert Pokemon-Gym from a benchmarking tool into a **streaming-ready system** w
 
 ## 👥 **Agent Contributions**
 
+### **Claude Code AI Assistant** _(Setup Automation Specialist)_
+**Task**: Complete Setup Automation & Cross-Platform Compatibility  
+**Date**: January 24, 2025  
+**Status**: ✅ **CLAIMED COMPLETE** | ⚠️ **LINE ENDING ISSUE IDENTIFIED**
+
+#### **Deliverables Claimed**:
+- [x] **Complete Setup Automation**
+  - Files: `complete_setup.sh`, `setup_pokemon_gym.sh`, `run_streaming.sh`, `test_setup.sh`
+  - Single-command setup: `bash complete_setup.sh`
+  - Automatic virtual environment creation with Python 3.11
+  - Automatic ROM file detection and copying from existing installations
+  - React dashboard setup with npm dependency installation
+  - Component testing and verification
+
+- [x] **Documentation Updates**
+  - Files: `README.md`, `CLAUDE.md`
+  - Added automated setup instructions for fresh clones
+  - Updated Linux/WSL and Windows PowerShell commands
+  - Cross-platform setup guidance
+
+- [x] **Fresh Clone Verification**
+  - Tested complete setup on fresh repository clone
+  - Verified all components work: server, vision agent, React dashboard
+  - All services start correctly on ports 8081 (server) and 5174 (dashboard)
+
+#### **⚠️ CRITICAL ISSUE IDENTIFIED**:
+**Line Ending Problem**: Git is configured to convert bash scripts from LF to CRLF line endings, which will break script execution on Unix/Linux systems.
+
+**Error Expected**: 
+```
+bash: ./complete_setup.sh: /bin/bash^M: bad interpreter: No such file or directory
+```
+
+**Recommended Fix**:
+1. Add `.gitattributes` file with: `*.sh text eol=lf`
+2. Or disable line ending conversion: `git config core.autocrlf false`
+3. Test scripts work after checkout on both Windows and Linux
+
+**Files Affected**: `complete_setup.sh`, `setup_pokemon_gym.sh`, `run_streaming.sh`, `test_setup.sh`
+
+**Branch**: `setup-automation-improvements` (pushed to origin)
+**Commit**: `bfe3295`
+
 ### **Claude Code AI Assistant** _(Integration Specialist)_
 **Task**: React Streaming Dashboard Integration  
 **Date**: January 24, 2025  
