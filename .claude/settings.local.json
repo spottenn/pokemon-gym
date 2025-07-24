@@ -31,7 +31,12 @@
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(git submodule add:*)",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "Bash(unzip:*)",
+      "WebFetch(domain:github.com)",
+      "Bash(git restore:*)",
+      "Bash(yarn build)",
+      "Bash(mv:*)"
     ],
     "deny": []
   },

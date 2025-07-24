@@ -22,6 +22,8 @@ This is **Pokemon-Gym**, a platform for evaluating AI agents on Pokemon Red game
 ### Streaming Infrastructure
 - **Streaming Mode**: Emulator kept at 1x continuous speed for live content (see MVP plan)
 - **Session Management**: Automatic saves every 50 steps with session continuation support
+- **React Dashboard** (`streaming-dashboard/`): Real-time web interface for OBS streaming integration
+- **Progress Tracking**: See `PENDING_AUDIT_PROGRESS_REPORT.md` for latest development status
 
 ## Environment Setup
 
@@ -102,12 +104,23 @@ The `langgraph_agent.py` represents an alternative next-generation agent archite
 ### Development Workflow
 For development, use PyCharm debug configuration to restart components as needed. No live reloading is used.
 
-### Streaming Setup (MVP)
-For live streaming Pokemon gameplay with AI thoughts:
-1. Start server: `python -m server.evaluator_server`
-2. Run agent with streaming: `python agents/vision_agent.py`, arguments TBD
-3. Configure OBS to read display log output
-4. Add game window capture for Pokemon gameplay
+### Streaming Setup (Production)
+For live streaming Pokemon gameplay with AI thoughts and real-time dashboard:
+
+**Automated Setup (Recommended):**
+```bash
+# Start all components (server, agent, dashboard)
+powershell -ExecutionPolicy Bypass -File start_streaming.ps1
+
+# Stop all components
+powershell -ExecutionPolicy Bypass -File stop_streaming.ps1
+```
+
+**Manual Setup:**
+1. Start evaluator server: `python -m server.evaluator_server --port 8081`
+2. Start vision agent: `python agents/vision_agent.py`  
+3. Start React dashboard: `cd streaming-dashboard && yarn dev --port 5174`
+4. Configure OBS to capture dashboard at `http://localhost:5174`
 
 ### Session Management
 - Sessions auto-save every 50 steps to `gameplay_sessions/`

@@ -55,3 +55,4 @@ evaluation_sessions/
 /.venv-windows/
 /.venv/
 agent_log*.jsonl
+/llm_pokemon_scaffold/
