@@ -93,10 +93,10 @@ class LiteLLMProvider:
             os.environ["OPENROUTER_API_KEY"] = api_key
 
         elif self.provider == "ollama":
-            # Ollama doesn't need API keys but should validate service availability
-            logger.info(
-                "Note: Ensure Ollama is running locally on http://localhost:11434"
-            )
+            # Configure Ollama endpoint for WSL -> Windows host
+            ollama_endpoint = "http://172.31.160.1:11434"
+            os.environ["OLLAMA_API_BASE"] = ollama_endpoint
+            logger.info(f"Configured Ollama endpoint: {ollama_endpoint}")
 
         else:
             raise ValueError(f"Unsupported provider: {self.provider}")

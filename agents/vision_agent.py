@@ -67,13 +67,11 @@ class VisionAgent:
         model_name: str = "gemma3:latest",
         temperature: float = 0.7,
         max_tokens: int = 1500,
-        thoughts_file: str = "thoughts.txt",
         max_retries: int = 3,
         headless: bool = True,
         sound: bool = False,
     ):
         self.server_url = server_url
-        self.thoughts_file = thoughts_file
         self.max_retries = max_retries
         self.step_count = 0
         self.headless = headless
@@ -106,7 +104,7 @@ class VisionAgent:
         self.session_manager = SessionManager()
 
         logger.info(f"Vision agent initialized with {provider} model: {model_name}")
-        logger.info(f"Thoughts will be written to: {thoughts_file}")
+        logger.info(f"Thoughts will be written to: {self.thoughts_log_file}")
 
     def get_simple_prompt(
         self, screenshot_b64: str, location: str, recent_actions: List[str]
@@ -238,27 +236,12 @@ Remember: Vary your actions based on what you actually see! Don't just press 'a'
             return None
 
     def update_thoughts_file(self, thoughts: str, action_desc: str, location: str):
-        """Update the thoughts file for streaming display and append to log."""
+        """Append thoughts to persistent log file."""
         import datetime
 
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         try:
-            # Write to streaming file (for OBS) - still overwrite for real-time display
-            with open(self.thoughts_file, "w", encoding="utf-8") as f:
-                f.write(f"=== AI Vision Agent - Step {self.step_count} ===\n\n")
-
-                if thoughts:
-                    f.write("REASONING:\n")
-                    f.write(thoughts)
-                    f.write("\n\n")
-
-                f.write(f"ACTION: {action_desc}\n\n")
-                f.write(f"=== Location: {location} ===\n")
-                f.write(
-                    f"=== Last Actions: {', '.join([a.get('type', 'unknown') for a in self.recent_actions[-3:]])} ==="
-                )
-
             # Append to persistent log file
             with open(self.thoughts_log_file, "a", encoding="utf-8") as f:
                 f.write(
@@ -424,9 +407,6 @@ def main():
     parser.add_argument("--temperature", type=float, default=0.7, help="Temperature")
     parser.add_argument("--max-tokens", type=int, default=1500, help="Max tokens")
     parser.add_argument(
-        "--thoughts-file", default="thoughts.txt", help="Thoughts output file"
-    )
-    parser.add_argument(
         "--max-steps", type=int, default=1000, help="Maximum steps to run"
     )
     parser.add_argument("--max-retries", type=int, default=3, help="Max LLM retries")
@@ -445,7 +425,6 @@ def main():
         model_name=args.model,
         temperature=args.temperature,
         max_tokens=args.max_tokens,
-        thoughts_file=args.thoughts_file,
         max_retries=args.max_retries,
         headless=args.headless,
         sound=args.sound,

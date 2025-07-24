@@ -127,7 +127,6 @@ class AIServerAgent:
         max_tokens: int = 4000,
         max_history: int = 30,
         log_file: str = "agent_log.jsonl",
-        thoughts_file: str = "thoughts.txt",
         max_retries: int = 5,
         retry_delay: float = 1.0,
     ):
@@ -234,9 +233,6 @@ class AIServerAgent:
             os.makedirs(log_dir, exist_ok=True)
         logger.info(f"Will log all generated content to: {self.log_file}")
 
-        # Streaming thoughts file for OBS integration
-        self.thoughts_file = thoughts_file
-        logger.info(f"Will stream AI thoughts to: {self.thoughts_file}")
 
         # Create persistent thoughts log file
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -1209,12 +1205,6 @@ class AIServerAgent:
             if thought_text:
                 location = state.get("location", "Unknown")
 
-                # Write to streaming file (for OBS) - overwrite for real-time display
-                with open(self.thoughts_file, "w", encoding="utf-8") as f:
-                    f.write(f"=== AI Thoughts - Step {self.step_count} ===\n\n")
-                    f.write(thought_text)
-                    f.write(f"\n\n=== Location: {location} ===")
-
                 # Append to persistent log file
                 timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 with open(self.thoughts_log_file, "a", encoding="utf-8") as f:
@@ -1948,12 +1938,6 @@ def main():
         help="File to save agent logs",
     )
     parser.add_argument(
-        "--thoughts-file",
-        type=str,
-        default="thoughts.txt",
-        help="File to save AI thoughts for streaming (overwritten each step)",
-    )
-    parser.add_argument(
         "--max-retries", type=int, default=5, help="Maximum retries for API calls"
     )
     parser.add_argument(
@@ -1984,7 +1968,6 @@ def main():
         temperature=args.temperature,
         max_tokens=args.max_tokens,
         log_file=args.log_file,
-        thoughts_file=args.thoughts_file,
         max_retries=args.max_retries,
         retry_delay=args.retry_delay,
     )

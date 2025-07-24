@@ -811,15 +811,6 @@ What can you observe in this image? Be specific about:
                             else "Unknown"
                         )
 
-                        # Write to streaming file (for OBS) - overwrite for real-time display
-                        streaming_file = "thoughts.txt"
-                        with open(streaming_file, "w", encoding="utf-8") as f:
-                            f.write(
-                                f"=== AI Thoughts - Step {state.pokemon_state.step_count} ===\n\n"
-                            )
-                            f.write(ai_message)
-                            f.write(f"\n\n=== Location: {location} ===")
-
                         # Append to persistent log file
                         timestamp = datetime.datetime.now().strftime(
                             "%Y-%m-%d %H:%M:%S"
