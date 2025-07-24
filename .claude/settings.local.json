@@ -51,7 +51,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": ".venv\\Scripts\\activate"
+            "command": "source .venv\\bin\\activate"
           }
         ]
       }

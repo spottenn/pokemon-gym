@@ -25,8 +25,17 @@ PokemonGym is a platform that allows AI agents to play Pokemon Red through a ser
 
 ## Quick Start
 
+**Automated Setup (Recommended):**
+```bash
+# Run complete setup and start all services
+bash complete_setup.sh
+```
+
+**Manual Setup:**
 1. **Install dependencies:**
    ```bash
+   python3.11 -m venv .venv
+   source .venv/bin/activate
    pip install -r requirements.txt
    ```
 
@@ -41,7 +50,7 @@ PokemonGym is a platform that allows AI agents to play Pokemon Red through a ser
 4. **Run an agent:**
    ```bash
    # Run AI agent
-   python agents/demo_agent.py
+   python agents/demo_agent.py --provider claude
    
    # OR run human interface
    python agents/human_agent.py
@@ -59,22 +68,45 @@ PokemonGym is a platform that allows AI agents to play Pokemon Red through a ser
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/benchflow-ai/pokemon-gym
-cd PokemonGym
+git clone https://github.com/spottenn/pokemon-gym
+cd pokemon-gym
 ```
 
-2. Install dependencies:
+2. Run the complete setup script:
 ```bash
-pip install -r requirements.txt
+bash complete_setup.sh
 ```
 
-3. Place your Pokemon Red ROM file in the root directory and name it `Pokemon_Red.gb`
+This script will:
+- Create Python virtual environment
+- Install all dependencies
+- Copy Pokemon ROM from existing installations
+- Set up React streaming dashboard
+- Configure environment variables
+- Start all services (server, agent, dashboard)
+
+3. For manual setup, follow these steps:
+```bash
+# Create virtual environment
+python3.11 -m venv .venv
+source .venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Copy environment file and add API keys
+cp .env.example .env
+
+# Place Pokemon_Red.gb in root directory
+
+# Set up React dashboard
+cd streaming-dashboard
+npm install
+cd ..
+```
 
 4. Set up API keys for AI agents:
 ```bash
-# Copy the example environment file
-cp .env.example .env
-
 # Edit .env and add your actual API keys
 # ANTHROPIC_API_KEY=your_anthropic_key_here  # For Claude
 # OPENAI_API_KEY=your_openai_key_here        # For GPT-4o

@@ -30,16 +30,20 @@ This is **Pokemon-Gym**, a platform for evaluating AI agents on Pokemon Red game
 ### Virtual Environment
 This project uses `.venv` for dependency isolation. 
 
-For the first setup with new instances of the repo (likely already done for you):
+For the first setup with new instances of the repo:
 
 ```bash
-py -3.11 -m venv .venv
+# Quick setup - run this single script
+bash complete_setup.sh
 
-# Install dependencies
+# OR manual setup:
+python3.11 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
+cp .env.example .env
+# Copy Pokemon_Red.gb from another clone
+# Set up React dashboard in streaming-dashboard/
 ```
-
-The virtual environment is automatically activated via Claude Code hooks configuration.
 
 
 ### Environment Variables
@@ -115,17 +119,20 @@ For live streaming Pokemon gameplay with AI thoughts and real-time dashboard:
 
 **Automated Setup (Recommended):**
 ```bash
-# Start all components (server, agent, dashboard)
+# Linux/WSL - Start all components (server, agent, dashboard)
+bash run_streaming.sh
+
+# Windows PowerShell
 powershell -ExecutionPolicy Bypass -File start_streaming.ps1
 
-# Stop all components
+# Stop all components (Windows)
 powershell -ExecutionPolicy Bypass -File stop_streaming.ps1
 ```
 
 **Manual Setup:**
 1. Start evaluator server: `python -m server.evaluator_server --port 8081`
 2. Start vision agent: `python agents/vision_agent.py`  
-3. Start React dashboard: `cd streaming-dashboard && yarn dev --port 5174`
+3. Start React dashboard: `cd streaming-dashboard && npm run dev -- --port 5174`
 4. Configure OBS to capture dashboard at `http://localhost:5174`
 
 ### Session Management
