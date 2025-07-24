@@ -12,6 +12,12 @@ from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage, AI
 from langchain_core.outputs import ChatGeneration, ChatResult
 from pydantic import Field
 
+try:
+    from .wsl_utils import get_ollama_endpoint, test_ollama_connection
+except ImportError:
+    # Handle case when running as main script
+    from wsl_utils import get_ollama_endpoint, test_ollama_connection
+
 logger = logging.getLogger(__name__)
 
 
@@ -89,8 +95,15 @@ class LiteLLMProvider:
             os.environ["OPENROUTER_API_KEY"] = api_key
             
         elif self.provider == "ollama":
-            # Ollama doesn't need API keys but should validate service availability
-            logger.info("Note: Ensure Ollama is running locally on http://localhost:11434")
+            # Configure Ollama endpoint for WSL -> Windows host
+            ollama_endpoint = get_ollama_endpoint()
+            os.environ["OLLAMA_API_BASE"] = ollama_endpoint
+            
+            # Test connection to ensure Ollama is accessible
+            if test_ollama_connection(ollama_endpoint):
+                logger.info(f"Successfully connected to Ollama at {ollama_endpoint}")
+            else:
+                logger.warning(f"Could not connect to Ollama at {ollama_endpoint}. Please ensure Ollama is running on Windows host.")
             
         else:
             raise ValueError(f"Unsupported provider: {self.provider}")
