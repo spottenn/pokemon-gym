@@ -144,7 +144,11 @@ class PyBoyThread:
     def start(self, rom_path: str, headless: bool = True, sound: bool = False):
         """Start the PyBoy thread."""
         if self.running:
-            logger.warning("PyBoy thread already running")
+            logger.warning("PyBoy thread already running, skipping start")
+            return
+        
+        if self.pyboy is not None:
+            logger.warning("PyBoy instance already exists, skipping start")
             return
             
         self.running = True
