@@ -43,6 +43,13 @@ class Emulator:
 
     def initialize(self):
         """Initialize the emulator."""
+        # Guard against multiple initialization
+        if self.pyboy is not None or self.pyboy_thread is not None:
+            logger.warning("Emulator already initialized, skipping initialization. Current state: pyboy=%s, pyboy_thread=%s", 
+                         type(self.pyboy).__name__ if self.pyboy else None,
+                         type(self.pyboy_thread).__name__ if self.pyboy_thread else None)
+            return
+            
         if self.streaming:
             # Use PyBoy thread for streaming mode - this handles all threading issues
             logger.info("Initializing emulator in streaming mode with dedicated PyBoy thread")
