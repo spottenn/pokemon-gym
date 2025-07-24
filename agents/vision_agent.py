@@ -32,8 +32,8 @@ except ImportError:
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(message)s',
-    handlers=[logging.StreamHandler()]
+    format="%(asctime)s - %(message)s",
+    handlers=[logging.StreamHandler()],
 )
 logger = logging.getLogger(__name__)
 
@@ -59,7 +59,7 @@ class Button(str, Enum):
 
 class VisionAgent:
     """Simple vision-based Pokemon agent that makes single-turn decisions based on screenshots."""
-    
+
     def __init__(
         self,
         server_url: str = "http://localhost:8080",
@@ -67,35 +67,44 @@ class VisionAgent:
         model_name: str = "gemma3:latest",
         temperature: float = 0.7,
         max_tokens: int = 1500,
-        thoughts_file: str = "thoughts.txt",
         max_retries: int = 3,
         headless: bool = True,
-        sound: bool = False
+        sound: bool = False,
     ):
         self.server_url = server_url
-        self.thoughts_file = thoughts_file
         self.max_retries = max_retries
         self.step_count = 0
         self.headless = headless
         self.sound = sound
-        
+
+        # Create logs directory if it doesn't exist
+        os.makedirs("logs", exist_ok=True)
+
+        # Set up proper log files with timestamps
+        import datetime
+
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.thoughts_log_file = os.path.join(
+            "logs", f"vision_agent_thoughts_{timestamp}.log"
+        )
+
         # Simple memory system - keep last few actions and observations
         self.recent_actions: List[Dict] = []
         self.memory_limit = 10
-        
+
         # Initialize LLM provider
         self.llm = LiteLLMProvider(
             provider=provider,
             model_name=model_name,
             temperature=temperature,
-            max_tokens=max_tokens
+            max_tokens=max_tokens,
         )
-        
+
         # Session manager for auto-resume
         self.session_manager = SessionManager()
-        
+
         logger.info(f"Vision agent initialized with {provider} model: {model_name}")
-        logger.info(f"Thoughts will be written to: {thoughts_file}")
+        logger.info(f"Thoughts will be written to: {self.thoughts_log_file}")
 
     def get_simple_prompt(self, screenshot_b64: str) -> str:
         """Create a pure vision-focused prompt with chain-of-thought reasoning."""
@@ -129,70 +138,64 @@ Remember: Make decisions based purely on what you see in the image. Analyze the 
     def parse_response(self, response: str) -> Tuple[Optional[str], Optional[Dict]]:
         """Parse LLM response to extract thoughts and action."""
         try:
-            lines = response.strip().split('\n')
+            lines = response.strip().split("\n")
             thoughts = None
             action_line = None
-            
+
             # Extract thoughts
             for i, line in enumerate(lines):
-                if line.strip().startswith('THOUGHTS:'):
+                if line.strip().startswith("THOUGHTS:"):
                     # Collect thoughts from this line and continue until ACTION line
-                    thoughts_lines = [line.replace('THOUGHTS:', '').strip()]
+                    thoughts_lines = [line.replace("THOUGHTS:", "").strip()]
                     for j in range(i + 1, len(lines)):
-                        if lines[j].strip().startswith('ACTION:'):
+                        if lines[j].strip().startswith("ACTION:"):
                             break
                         thoughts_lines.append(lines[j].strip())
-                    thoughts = ' '.join(thoughts_lines).strip()
+                    thoughts = " ".join(thoughts_lines).strip()
                     break
-            
+
             # Extract action
             for line in lines:
-                if line.strip().startswith('ACTION:'):
+                if line.strip().startswith("ACTION:"):
                     action_line = line.strip()
                     break
-            
+
             if not action_line:
                 logger.warning("No ACTION found in response")
                 return thoughts, None
-                
+
             # Parse "ACTION: press_key a" or "ACTION: wait 60"
-            action_part = action_line.replace('ACTION:', '').strip()
+            action_part = action_line.replace("ACTION:", "").strip()
             parts = action_part.split()
-            
+
             if len(parts) < 2:
                 logger.warning(f"Invalid action format: {action_part}")
                 return thoughts, None
-                
+
             action_type = parts[0]
             action = None
-            
+
             if action_type == "press_key":
                 if len(parts) != 2:
                     logger.warning(f"Invalid press_key format: {action_part}")
                     return thoughts, None
-                action = {
-                    "action_type": "press_key",
-                    "keys": [parts[1]]
-                }
+                action = {"action_type": "press_key", "keys": [parts[1]]}
             elif action_type == "wait":
                 if len(parts) != 2:
                     logger.warning(f"Invalid wait format: {action_part}")
                     return thoughts, None
                 try:
                     frames = int(parts[1])
-                    action = {
-                        "action_type": "wait",
-                        "frames": frames
-                    }
+                    action = {"action_type": "wait", "frames": frames}
                 except ValueError:
                     logger.warning(f"Invalid frame count: {parts[1]}")
                     return thoughts, None
             else:
                 logger.warning(f"Unknown action type: {action_type}")
                 return thoughts, None
-                
+
             return thoughts, action
-                
+
         except Exception as e:
             logger.error(f"Error parsing response: {e}")
             return None, None
@@ -215,7 +218,9 @@ Remember: Make decisions based purely on what you see in the image. Analyze the 
         try:
             # In streaming mode, we send the action and then immediately request the game state
             # The server will queue the action and return the current state
-            response = requests.post(f"{self.server_url}/action", json=action, timeout=30)
+            response = requests.post(
+                f"{self.server_url}/action", json=action, timeout=30
+            )
             if response.status_code == 200:
                 return response.json()
             else:
@@ -227,8 +232,12 @@ Remember: Make decisions based purely on what you see in the image. Analyze the 
 
     def update_thoughts_file(self, thoughts: str, action_desc: str):
         """Update the thoughts file for streaming display."""
+        import datetime
+
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         try:
-            with open(self.thoughts_file, 'w', encoding='utf-8') as f:
+            # Append to persistent log file
+            with open(self.thoughts_log_file, "a", encoding="utf-8") as f:
                 f.write(f"=== AI Vision Agent - Step {self.step_count} ===\n\n")
                 
                 if thoughts:
@@ -238,7 +247,7 @@ Remember: Make decisions based purely on what you see in the image. Analyze the 
                 
                 f.write(f"ACTION: {action_desc}\n")
         except Exception as e:
-            logger.error(f"Error updating thoughts file: {e}")
+            logger.error(f"Error updating thoughts files: {e}")
 
     def add_to_memory(self, action_type: str):
         """Add action to simple memory."""
@@ -247,10 +256,10 @@ Remember: Make decisions based purely on what you see in the image. Analyze the 
             "type": action_type
         }
         self.recent_actions.append(memory_entry)
-        
+
         # Keep only recent entries
         if len(self.recent_actions) > self.memory_limit:
-            self.recent_actions = self.recent_actions[-self.memory_limit:]
+            self.recent_actions = self.recent_actions[-self.memory_limit :]
 
     def run_step(self) -> bool:
         """Run a single step of the vision agent."""
@@ -260,13 +269,12 @@ Remember: Make decisions based purely on what you see in the image. Analyze the 
             if not game_state:
                 logger.error("Could not get game state")
                 return False
-            
+
             self.step_count += 1
             screenshot_b64 = game_state.get("screenshot_base64", "")
             
             # Create pure vision prompt - no game state context
             prompt = self.get_simple_prompt(screenshot_b64)
-            
             # Get LLM response with screenshot as image
             response = None
             for attempt in range(self.max_retries):
@@ -279,30 +287,30 @@ Remember: Make decisions based purely on what you see in the image. Analyze the 
                         logger.error("All LLM attempts failed")
                         return False
                     time.sleep(1)
-            
+
             if not response:
                 return False
-            
+
             # Parse response for thoughts and action
             thoughts, action = self.parse_response(response)
             if not action:
                 logger.warning("Could not parse action, using default wait")
                 action = {"action_type": "wait", "frames": 60}
                 thoughts = thoughts or "Could not parse action, using default wait"
-            
+
             # Send action
             result = self.send_action(action)
             if not result:
                 logger.error("Failed to send action")
                 return False
-            
+
             # Create action description
             action_desc = f"{action['action_type']}"
-            if action['action_type'] == 'press_key':
+            if action["action_type"] == "press_key":
                 action_desc += f" {action['keys'][0]}"
-            elif action['action_type'] == 'wait':
+            elif action["action_type"] == "wait":
                 action_desc += f" {action['frames']}"
-            
+
             # Update thoughts file with reasoning and action
             self.update_thoughts_file(thoughts or "No thoughts provided", action_desc)
             
@@ -311,7 +319,7 @@ Remember: Make decisions based purely on what you see in the image. Analyze the 
             
             logger.info(f"Step {self.step_count}: {action_desc}")
             return True
-            
+
         except Exception as e:
             logger.error(f"Error in run_step: {e}")
             return False
@@ -319,7 +327,7 @@ Remember: Make decisions based purely on what you see in the image. Analyze the 
     def run(self, max_steps: int = 1000):
         """Run the vision agent for a specified number of steps."""
         logger.info(f"Starting vision agent for {max_steps} steps")
-        
+
         # Try to resume latest session
         latest_session = self.session_manager.get_latest_session()
         if latest_session:
@@ -334,65 +342,73 @@ Remember: Make decisions based purely on what you see in the image. Analyze the 
                 "headless": self.headless,
                 "sound": self.sound,
                 "streaming": True,
-                "session_id": latest_session
+                "session_id": latest_session,
             }
         else:
             # New session
             init_data = {
                 "headless": self.headless,
                 "sound": self.sound,
-                "streaming": True
+                "streaming": True,
             }
-        
+
         # Initialize server
         try:
-            response = requests.post(f"{self.server_url}/initialize", json=init_data, timeout=30)
+            response = requests.post(
+                f"{self.server_url}/initialize", json=init_data, timeout=30
+            )
             if response.status_code != 200:
                 logger.error(f"Failed to initialize server: {response.status_code}")
                 return
         except Exception as e:
             logger.error(f"Error initializing server: {e}")
             return
-        
+
         # Main game loop
         for step in range(max_steps):
             success = self.run_step()
             if not success:
                 logger.warning("Step failed, continuing...")
-            
+
             # Small delay to prevent overwhelming the server
             time.sleep(0.5)
-        
+
         logger.info("Vision agent run completed")
 
 
 def main():
     parser = argparse.ArgumentParser(description="Pokemon Red Vision Agent")
-    parser.add_argument("--server-url", default="http://localhost:8080", help="Server URL")
+    parser.add_argument(
+        "--server-url", default="http://localhost:8080", help="Server URL"
+    )
     parser.add_argument("--provider", default="ollama", help="LLM provider")
     parser.add_argument("--model", default="gemma3:latest", help="Model name")
     parser.add_argument("--temperature", type=float, default=0.7, help="Temperature")
     parser.add_argument("--max-tokens", type=int, default=1500, help="Max tokens")
-    parser.add_argument("--thoughts-file", default="thoughts.txt", help="Thoughts output file")
-    parser.add_argument("--max-steps", type=int, default=1000, help="Maximum steps to run")
+    parser.add_argument(
+        "--max-steps", type=int, default=1000, help="Maximum steps to run"
+    )
     parser.add_argument("--max-retries", type=int, default=3, help="Max LLM retries")
-    parser.add_argument("--headless", action="store_true", default=False, help="Run without game window")
-    parser.add_argument("--sound", action="store_true", default=False, help="Enable game sound")
-    
+    parser.add_argument(
+        "--headless", action="store_true", default=False, help="Run without game window"
+    )
+    parser.add_argument(
+        "--sound", action="store_true", default=False, help="Enable game sound"
+    )
+
     args = parser.parse_args()
-    
+
     agent = VisionAgent(
         server_url=args.server_url,
         provider=args.provider,
         model_name=args.model,
         temperature=args.temperature,
         max_tokens=args.max_tokens,
-        thoughts_file=args.thoughts_file,
         max_retries=args.max_retries,
         headless=args.headless,
-        sound=args.sound
+        sound=args.sound,
     )
-    
+
     agent.run(max_steps=args.max_steps)
 
 
