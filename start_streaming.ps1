@@ -17,7 +17,7 @@ Start-Sleep -Seconds 3
 
 # Start vision agent in new PowerShell window
 Write-Host "Starting vision agent..." -ForegroundColor Yellow
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "& '.\.venv\Scripts\Activate.ps1'; `$env:SERVER_URL='http://localhost:$EvaluatorPort'; python agents\vision_agent.py" -WindowStyle Normal
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "& '.\.venv\Scripts\Activate.ps1'; python agents\vision_agent.py --server-url http://localhost:$EvaluatorPort" -WindowStyle Normal
 
 # Wait for agent to start
 Start-Sleep -Seconds 2
