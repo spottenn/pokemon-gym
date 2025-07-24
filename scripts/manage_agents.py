@@ -1,312 +1,320 @@
 #!/usr/bin/env python3
 """
-Manage running Claude Code agents - monitor status, view logs, and control instances.
+Simple tmux-based agent management.
 """
 
 import json
-import os
 import subprocess
 import sys
-import signal
-import argparse
+import shutil
+import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
-import time
-import psutil
+from typing import List, Dict
 
-def load_agents_info(info_file: Path) -> List[Dict]:
-    """Load agent information from file."""
-    if not info_file.exists():
+def load_prompts(prompts_file: str) -> List[Dict]:
+    """Load prompts from JSON file to get agent info."""
+    with open(prompts_file, 'r') as f:
+        data = json.load(f)
+    return data['prompts']
+
+def get_tmux_sessions() -> List[str]:
+    """Get list of active tmux sessions."""
+    try:
+        result = subprocess.run(['tmux', 'list-sessions', '-F', '#{session_name}'], 
+                              capture_output=True, text=True, check=True)
+        return [line.strip() for line in result.stdout.strip().split('\n') if line.strip()]
+    except subprocess.CalledProcessError:
         return []
+
+def get_agent_sessions(prompts: List[Dict]) -> List[Dict]:
+    """Get status of all agent sessions."""
+    all_sessions = get_tmux_sessions()
+    agent_sessions = []
     
-    with open(info_file, 'r') as f:
-        return json.load(f)
-
-def save_agents_info(agents_info: List[Dict], info_file: Path):
-    """Save agent information to file."""
-    with open(info_file, 'w') as f:
-        json.dump(agents_info, f, indent=2)
-
-def check_process_status(pid: int) -> bool:
-    """Check if a process is still running."""
-    try:
-        process = psutil.Process(pid)
-        return process.is_running()
-    except psutil.NoSuchProcess:
-        return False
-
-def get_process_info(pid: int) -> Optional[Dict]:
-    """Get information about a running process."""
-    try:
-        process = psutil.Process(pid)
-        return {
-            'cpu_percent': process.cpu_percent(),
-            'memory_mb': process.memory_info().rss / 1024 / 1024,
-            'status': process.status(),
-            'create_time': process.create_time()
-        }
-    except psutil.NoSuchProcess:
-        return None
-
-def format_duration(seconds: float) -> str:
-    """Format duration in human-readable format."""
-    hours = int(seconds // 3600)
-    minutes = int((seconds % 3600) // 60)
-    secs = int(seconds % 60)
+    for prompt in prompts:
+        session_name = f"agent-{prompt['id']}"
+        is_running = session_name in all_sessions
+        agent_sessions.append({
+            'id': prompt['id'],
+            'name': prompt['name'],
+            'session_name': session_name,
+            'running': is_running
+        })
     
-    if hours > 0:
-        return f"{hours}h {minutes}m {secs}s"
-    elif minutes > 0:
-        return f"{minutes}m {secs}s"
-    else:
-        return f"{secs}s"
+    return agent_sessions
 
-def list_agents(agents_info: List[Dict]):
+def list_agents(agent_sessions: List[Dict]):
     """List all agents and their status."""
-    print(f"\n{'='*80}")
-    print(f"{'ID':<20} {'Name':<25} {'PID':<8} {'Status':<10} {'Runtime':<15}")
-    print(f"{'-'*80}")
+    print(f"\n{'ID':<25} {'Name':<30} {'Status':<10}")
+    print(f"{'-'*70}")
     
-    for agent in agents_info:
-        pid = agent['pid']
-        is_running = check_process_status(pid)
-        status = "Running" if is_running else "Stopped"
-        
-        runtime = ""
-        if is_running and 'started_at' in agent:
-            duration = time.time() - agent['started_at']
-            runtime = format_duration(duration)
-        
-        print(f"{agent['id']:<20} {agent['name']:<25} {pid:<8} {status:<10} {runtime:<15}")
+    for agent in agent_sessions:
+        status = "Running" if agent['running'] else "Stopped"
+        print(f"{agent['id']:<25} {agent['name']:<30} {status:<10}")
     
-    print(f"{'='*80}")
+    print(f"{'-'*70}")
+    running_count = sum(1 for a in agent_sessions if a['running'])
+    print(f"Total: {len(agent_sessions)} agents, {running_count} running")
 
-def show_agent_details(agent: Dict):
-    """Show detailed information about an agent."""
-    print(f"\n{'='*60}")
-    print(f"Agent: {agent['name']} ({agent['id']})")
-    print(f"{'='*60}")
-    print(f"Session ID: {agent['session_id']}")
-    print(f"Instance Path: {agent['instance_path']}")
-    print(f"PID: {agent['pid']}")
-    
-    if 'started_at' in agent:
-        start_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(agent['started_at']))
-        print(f"Started At: {start_time}")
-        duration = time.time() - agent['started_at']
-        print(f"Runtime: {format_duration(duration)}")
-    
-    # Process info
-    proc_info = get_process_info(agent['pid'])
-    if proc_info:
-        print(f"\nProcess Status:")
-        print(f"  Status: {proc_info['status']}")
-        print(f"  CPU: {proc_info['cpu_percent']:.1f}%")
-        print(f"  Memory: {proc_info['memory_mb']:.1f} MB")
-    else:
-        print(f"\nProcess Status: Not Running")
+def get_agent_instance_path(agent_id: str, project_root: Path) -> Path:
+    """Get the path to an agent's project copy."""
+    parent_dir = project_root.parent
+    return parent_dir / f"pokemon-gym-{agent_id}"
 
-def tail_agent_output(agent: Dict, lines: int = 50):
-    """Tail the output of an agent."""
-    instance_path = Path(agent['instance_path'])
+def create_project_copy(agent_id: str, source_dir: Path) -> Path:
+    """Create a project copy for the agent."""
+    parent_dir = source_dir.parent
+    instance_name = f"pokemon-gym-{agent_id}"
+    instance_path = parent_dir / instance_name
     
-    # Look for common log files
-    possible_logs = [
-        'PENDING_AUDIT_PROGRESS_REPORT.md',
-        'AUDIT_REPORT.md',
-        'agent_log.jsonl',
-        'output.log'
+    # Remove existing copy if it exists
+    if instance_path.exists():
+        print(f"Removing existing copy: {instance_path}")
+        shutil.rmtree(instance_path)
+    
+    print(f"Creating project copy: {instance_path}")
+    shutil.copytree(source_dir, instance_path, 
+                   ignore=shutil.ignore_patterns('__pycache__', '*.pyc', '.DS_Store'))
+    
+    return instance_path
+
+def start_agent(agent_id: str, prompts: List[Dict], project_root: Path) -> bool:
+    """Start a specific agent."""
+    prompt_config = next((p for p in prompts if p['id'] == agent_id), None)
+    if not prompt_config:
+        print(f"❌ Agent '{agent_id}' not found in prompts")
+        return False
+    
+    session_name = f"agent-{agent_id}"
+    
+    # Check if already running
+    if session_name in get_tmux_sessions():
+        print(f"⚠️  Agent '{agent_id}' is already running")
+        return False
+    
+    # Create or get project copy
+    instance_path = get_agent_instance_path(agent_id, project_root)
+    if not instance_path.exists():
+        try:
+            instance_path = create_project_copy(agent_id, project_root)
+        except Exception as e:
+            print(f"❌ Failed to create project copy for {agent_id}: {e}")
+            return False
+    
+    # Launch in tmux using the project copy
+    claude_cmd = [
+        'tmux', 'new-session', '-d', '-s', session_name,
+        'claude', '--dangerously-skip-permissions', '--add-dir', str(instance_path), prompt_config['prompt']
     ]
     
-    print(f"\n{'='*60}")
-    print(f"Recent output from {agent['name']} ({agent['id']})")
-    print(f"{'='*60}")
-    
-    found_logs = False
-    for log_file in possible_logs:
-        log_path = instance_path / log_file
-        if log_path.exists():
-            found_logs = True
-            print(f"\n--- {log_file} ---")
-            
-            # Read last N lines
-            with open(log_path, 'r') as f:
-                content = f.readlines()
-                recent_lines = content[-lines:] if len(content) > lines else content
-                for line in recent_lines:
-                    print(line.rstrip())
-    
-    if not found_logs:
-        print("No log files found in instance directory")
-
-def stop_agent(agent: Dict) -> bool:
-    """Stop a running agent."""
-    pid = agent['pid']
-    
-    if not check_process_status(pid):
-        print(f"Agent {agent['id']} is not running")
+    try:
+        subprocess.run(claude_cmd, check=True, cwd=str(instance_path))
+        print(f"✅ Started {prompt_config['name']} (session: {session_name})")
+        print(f"   Working in: {instance_path}")
+        return True
+    except subprocess.CalledProcessError as e:
+        print(f"❌ Failed to start {agent_id}: {e}")
         return False
+
+def cleanup_agent_work(agent_id: str, project_root: Path) -> bool:
+    """Create branch with agent's work and push it."""
+    instance_path = get_agent_instance_path(agent_id, project_root)
+    
+    if not instance_path.exists():
+        print(f"No project copy found for {agent_id}")
+        return True
     
     try:
-        os.kill(pid, signal.SIGTERM)
-        print(f"Sent SIGTERM to agent {agent['id']} (PID: {pid})")
+        # Check if there are any changes
+        result = subprocess.run(['git', 'status', '--porcelain'], 
+                               cwd=str(instance_path), capture_output=True, text=True)
         
-        # Wait for graceful shutdown
-        for _ in range(10):
-            if not check_process_status(pid):
-                print(f"Agent {agent['id']} stopped successfully")
-                return True
-            time.sleep(0.5)
+        if not result.stdout.strip():
+            print(f"No changes found for {agent_id}, skipping branch creation")
+            shutil.rmtree(instance_path)
+            print(f"Deleted project copy: {instance_path}")
+            return True
         
-        # Force kill if still running
-        os.kill(pid, signal.SIGKILL)
-        print(f"Force killed agent {agent['id']}")
+        # Create branch name with timestamp
+        timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+        branch_name = f"agent-{agent_id}-{timestamp}"
+        
+        print(f"Creating branch '{branch_name}' with {agent_id}'s changes...")
+        
+        # Create and switch to new branch
+        subprocess.run(['git', 'checkout', '-b', branch_name], 
+                      cwd=str(instance_path), check=True)
+        
+        # Stage all changes
+        subprocess.run(['git', 'add', '.'], cwd=str(instance_path), check=True)
+        
+        # Commit changes
+        commit_msg = f"Work by {agent_id}\n\n🤖 Generated with Claude Code\n\nCo-Authored-By: Claude <noreply@anthropic.com>"
+        subprocess.run(['git', 'commit', '-m', commit_msg], 
+                      cwd=str(instance_path), check=True)
+        
+        # Push branch
+        subprocess.run(['git', 'push', '-u', 'origin', branch_name], 
+                      cwd=str(instance_path), check=True)
+        
+        print(f"✅ Pushed branch '{branch_name}' with {agent_id}'s work")
+        
+        # Delete the project copy
+        shutil.rmtree(instance_path)
+        print(f"🗑️  Deleted project copy: {instance_path}")
+        
         return True
         
-    except ProcessLookupError:
-        print(f"Process {pid} not found")
-        return False
-    except Exception as e:
-        print(f"Error stopping agent: {e}")
+    except subprocess.CalledProcessError as e:
+        print(f"❌ Failed to cleanup {agent_id}: {e}")
+        print(f"Project copy remains at: {instance_path}")
         return False
 
-def restart_agent(agent: Dict, scripts_dir: Path) -> Optional[Dict]:
-    """Restart an agent."""
-    # Stop if running
-    if check_process_status(agent['pid']):
-        stop_agent(agent)
-        time.sleep(1)
+def stop_agent(agent_id: str, project_root: Path = None, cleanup: bool = True) -> bool:
+    """Stop a specific agent and optionally cleanup its work."""
+    session_name = f"agent-{agent_id}"
     
-    # Launch again
-    instance_path = Path(agent['instance_path'])
+    if session_name not in get_tmux_sessions():
+        print(f"⚠️  Agent '{agent_id}' is not running")
+        return False
     
-    # Load prompt
-    prompts_file = scripts_dir / 'prompts.json'
-    with open(prompts_file, 'r') as f:
-        prompts_data = json.load(f)
+    try:
+        subprocess.run(['tmux', 'kill-session', '-t', session_name], check=True)
+        print(f"🛑 Stopped agent '{agent_id}'")
+        
+        # Cleanup if requested and project_root provided
+        if cleanup and project_root:
+            cleanup_agent_work(agent_id, project_root)
+        
+        return True
+    except subprocess.CalledProcessError as e:
+        print(f"❌ Failed to stop {agent_id}: {e}")
+        return False
+
+def attach_agent(agent_id: str) -> bool:
+    """Attach to a specific agent session."""
+    session_name = f"agent-{agent_id}"
     
-    prompt_config = next((p for p in prompts_data['prompts'] if p['id'] == agent['id']), None)
-    if not prompt_config:
-        print(f"Prompt not found for agent {agent['id']}")
-        return None
+    if session_name not in get_tmux_sessions():
+        print(f"❌ Agent '{agent_id}' is not running")
+        return False
     
-    # Launch Claude instance
-    claude_cmd = [
-        'claude',
-        '--dangerously-skip-permissions',
-        '--session-id', agent['session_id'],
-        '--add-dir', str(instance_path),
-        prompt_config['prompt']
-    ]
+    print(f"Attaching to {agent_id}... (Press Ctrl+B then D to detach)")
+    try:
+        subprocess.run(['tmux', 'attach', '-t', session_name])
+        return True
+    except subprocess.CalledProcessError as e:
+        print(f"❌ Failed to attach to {agent_id}: {e}")
+        return False
+
+def stop_all_agents(agent_sessions: List[Dict], project_root: Path, cleanup: bool = True):
+    """Stop all running agents."""
+    running_agents = [a for a in agent_sessions if a['running']]
+    if not running_agents:
+        print("No agents are currently running")
+        return
     
-    process = subprocess.Popen(
-        claude_cmd,
-        cwd=str(instance_path),
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True
-    )
-    
-    # Update agent info
-    agent['pid'] = process.pid
-    agent['started_at'] = time.time()
-    
-    print(f"Restarted agent {agent['id']} with PID {process.pid}")
-    return agent
+    print(f"Stopping {len(running_agents)} running agents...")
+    for agent in running_agents:
+        stop_agent(agent['id'], project_root, cleanup)
 
 def main():
-    parser = argparse.ArgumentParser(description='Manage Claude Code agents')
-    parser.add_argument('command', choices=['list', 'status', 'stop', 'restart', 'logs'],
-                       help='Command to execute')
-    parser.add_argument('--agent', help='Agent ID for specific commands')
-    parser.add_argument('--all', action='store_true', help='Apply command to all agents')
-    parser.add_argument('--lines', type=int, default=50, help='Number of lines to show for logs')
-    
-    args = parser.parse_args()
-    
-    # Get paths
-    parent_dir = Path(__file__).parent.parent.parent
-    scripts_dir = Path(__file__).parent
-    info_file = parent_dir / 'claude_agents.json'
-    
-    # Load agents info
-    agents_info = load_agents_info(info_file)
-    
-    if not agents_info:
-        print("No agents found. Run launch_agents.py first.")
+    if len(sys.argv) < 2:
+        print("Usage: python manage_agents.py <command> [agent_id] [options]")
+        print("\nCommands:")
+        print("  list                    # List all agents and their status")
+        print("  start <agent_id>        # Start specific agent")
+        print("  stop <agent_id>         # Stop specific agent (with cleanup)")
+        print("  stop <agent_id> --no-cleanup  # Stop without creating branch")
+        print("  attach <agent_id>       # Attach to agent session")
+        print("  cleanup <agent_id>      # Cleanup agent work (create branch & delete)")
+        print("  stop-all                # Stop all running agents (with cleanup)")
+        print("  stop-all --no-cleanup   # Stop all without creating branches")
+        print("\nExample:")
+        print("  python manage_agents.py list")
+        print("  python manage_agents.py start claude_code_auditor")
+        print("  python manage_agents.py attach claude_code_auditor")
+        print("  python manage_agents.py stop claude_code_auditor")
+        print("  python manage_agents.py cleanup claude_code_auditor")
         sys.exit(1)
     
-    if args.command == 'list':
-        list_agents(agents_info)
+    command = sys.argv[1].lower()
     
-    elif args.command == 'status':
-        if args.agent:
-            agent = next((a for a in agents_info if a['id'] == args.agent), None)
-            if agent:
-                show_agent_details(agent)
-            else:
-                print(f"Agent '{args.agent}' not found")
-        else:
-            for agent in agents_info:
-                show_agent_details(agent)
+    # Check for --no-cleanup flag
+    no_cleanup = '--no-cleanup' in sys.argv
+    cleanup = not no_cleanup
     
-    elif args.command == 'logs':
-        if args.agent:
-            agent = next((a for a in agents_info if a['id'] == args.agent), None)
-            if agent:
-                tail_agent_output(agent, args.lines)
-            else:
-                print(f"Agent '{args.agent}' not found")
-        else:
-            for agent in agents_info:
-                tail_agent_output(agent, args.lines)
+    # Get project paths
+    project_root = Path(__file__).parent.parent
+    prompts_file = project_root / 'scripts' / 'prompts.json'
     
-    elif args.command == 'stop':
-        agents_to_stop = []
-        if args.all:
-            agents_to_stop = agents_info
-        elif args.agent:
-            agent = next((a for a in agents_info if a['id'] == args.agent), None)
-            if agent:
-                agents_to_stop = [agent]
-            else:
-                print(f"Agent '{args.agent}' not found")
-                sys.exit(1)
-        else:
-            print("Specify --agent ID or --all")
+    if not prompts_file.exists():
+        print(f"Error: Prompts file not found: {prompts_file}")
+        sys.exit(1)
+    
+    # Load prompts and get session status
+    prompts = load_prompts(str(prompts_file))
+    agent_sessions = get_agent_sessions(prompts)
+    
+    if command == 'list':
+        list_agents(agent_sessions)
+    
+    elif command == 'start':
+        if len(sys.argv) < 3:
+            print("Error: Please specify agent ID")
+            print("Available agents:")
+            for p in prompts:
+                print(f"  {p['id']}")
             sys.exit(1)
         
-        for agent in agents_to_stop:
-            stop_agent(agent)
+        agent_id = sys.argv[2]
+        start_agent(agent_id, prompts, project_root)
     
-    elif args.command == 'restart':
-        agents_to_restart = []
-        if args.all:
-            agents_to_restart = agents_info
-        elif args.agent:
-            agent = next((a for a in agents_info if a['id'] == args.agent), None)
-            if agent:
-                agents_to_restart = [agent]
-            else:
-                print(f"Agent '{args.agent}' not found")
-                sys.exit(1)
-        else:
-            print("Specify --agent ID or --all")
+    elif command == 'stop':
+        if len(sys.argv) < 3:
+            print("Error: Please specify agent ID")
+            running = [a for a in agent_sessions if a['running']]
+            if running:
+                print("Running agents:")
+                for a in running:
+                    print(f"  {a['id']}")
             sys.exit(1)
         
-        updated_agents = []
-        for i, agent in enumerate(agents_info):
-            if agent in agents_to_restart:
-                updated = restart_agent(agent, scripts_dir)
-                if updated:
-                    updated_agents.append(updated)
-                else:
-                    updated_agents.append(agent)
-            else:
-                updated_agents.append(agent)
+        agent_id = sys.argv[2]
+        stop_agent(agent_id, project_root, cleanup)
+    
+    elif command == 'attach':
+        if len(sys.argv) < 3:
+            print("Error: Please specify agent ID")
+            running = [a for a in agent_sessions if a['running']]
+            if running:
+                print("Running agents:")
+                for a in running:
+                    print(f"  {a['id']}")
+            sys.exit(1)
         
-        # Save updated info
-        save_agents_info(updated_agents, info_file)
+        agent_id = sys.argv[2]
+        attach_agent(agent_id)
+    
+    elif command == 'cleanup':
+        if len(sys.argv) < 3:
+            print("Error: Please specify agent ID")
+            print("Available agents with project copies:")
+            for p in prompts:
+                instance_path = get_agent_instance_path(p['id'], project_root)
+                if instance_path.exists():
+                    print(f"  {p['id']}")
+            sys.exit(1)
+        
+        agent_id = sys.argv[2]
+        cleanup_agent_work(agent_id, project_root)
+    
+    elif command == 'stop-all':
+        stop_all_agents(agent_sessions, project_root, cleanup)
+    
+    else:
+        print(f"Unknown command: {command}")
+        sys.exit(1)
 
 if __name__ == '__main__':
     main()
