@@ -36,7 +36,8 @@
       "WebFetch(domain:github.com)",
       "Bash(git restore:*)",
       "Bash(yarn build)",
-      "Bash(mv:*)"
+      "Bash(mv:*)",
+      "Bash(git push:*)"
     ],
     "deny": []
   },
