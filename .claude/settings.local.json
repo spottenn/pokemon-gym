@@ -37,7 +37,10 @@
       "Bash(git restore:*)",
       "Bash(yarn build)",
       "Bash(mv:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(pyenv:*)",
+      "Bash(grep:*)",
+      "Bash(source:*)"
     ],
     "deny": []
   },
