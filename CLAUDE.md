@@ -50,6 +50,12 @@ Copy `.env.example` to `.env` and configure API keys:
 - `GOOGLE_API_KEY`: For Google Gemini models
 - `XAI_API_KEY`: For XAI models
 
+### Local Development with Ollama
+For testing without API keys, use Ollama running on Windows (accessible from WSL):
+- Recommended model: `PetrosStav/gemma3-tools:4b` (pull with `ollama pull PetrosStav/gemma3-tools:4b`)
+- Ollama endpoint: `http://172.31.160.1:11434` (Windows host IP from WSL)
+- Use provider `ollama` when running agents
+
 ### ROM Setup
 Place `Pokemon_Red.gb` ROM file in the project root directory.
 
