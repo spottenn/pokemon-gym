@@ -49,8 +49,8 @@ bash complete_setup.sh
 
 4. **Run an agent:**
    ```bash
-   # Run AI agent
-   python agents/demo_agent.py --provider claude
+   # Run AI agent (no API keys needed)
+   python agents/demo_agent.py --provider ollama --model PetrosStav/gemma3-tools:4b
    
    # OR run human interface
    python agents/human_agent.py

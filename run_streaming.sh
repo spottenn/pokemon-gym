@@ -54,7 +54,7 @@ echo "✓ Evaluator server running on http://localhost:8081"
 # Start vision agent
 echo ""
 echo "2. Starting vision agent..."
-python agents/vision_agent.py --server-url http://localhost:8081 --provider claude --model claude-3-haiku-20240307 &
+python agents/vision_agent.py --server-url http://localhost:8081 --provider ollama --model PetrosStav/gemma3-tools:4b &
 AGENT_PID=$!
 sleep 2
 echo "✓ Vision agent started"
