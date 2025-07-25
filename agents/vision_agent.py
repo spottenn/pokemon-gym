@@ -70,6 +70,7 @@ class VisionAgent:
         max_retries: int = 3,
         headless: bool = True,
         sound: bool = False,
+        thoughts_flush_interval: float = 5.0,  # Seconds between forced flushes
     ):
         self.server_url = server_url
         self.max_retries = max_retries
@@ -92,9 +93,10 @@ class VisionAgent:
         self.recent_actions: List[Dict] = []
         self.memory_limit = 10
         
-        # Thoughts buffer for improved performance
+        # Thoughts buffer for improved performance (time-based)
         self.thoughts_buffer: List[str] = []
-        self.buffer_flush_interval = 10  # Flush every 10 steps
+        self.buffer_flush_interval_seconds = thoughts_flush_interval
+        self.last_flush_time = time.time()
 
         # Initialize LLM provider
         self.llm = LiteLLMProvider(
@@ -251,8 +253,11 @@ Available actions:
         # Add to buffer
         self.thoughts_buffer.append(log_entry)
         
-        # Flush buffer periodically or when it gets large
-        if len(self.thoughts_buffer) >= self.buffer_flush_interval or self.step_count % 50 == 0:
+        # Flush buffer based on time interval or when it gets too large
+        current_time = time.time()
+        time_since_last_flush = current_time - self.last_flush_time
+        
+        if time_since_last_flush >= self.buffer_flush_interval_seconds or len(self.thoughts_buffer) >= 50:
             self.flush_thoughts_buffer()
     
     def flush_thoughts_buffer(self):
@@ -265,6 +270,7 @@ Available actions:
                 f.write('\n'.join(self.thoughts_buffer))
                 f.write('\n')
             self.thoughts_buffer = []
+            self.last_flush_time = time.time()  # Update last flush time
         except Exception as e:
             logger.error(f"Error flushing thoughts buffer: {e}")
 
@@ -413,6 +419,7 @@ def main():
     parser.add_argument("--max-retries", type=int, default=3, help="Max LLM retries")
     parser.add_argument("--headless", action="store_true", default=False, help="Run without game window")
     parser.add_argument("--sound", action="store_true", default=False, help="Enable game sound")
+    parser.add_argument("--thoughts-flush-interval", type=float, default=5.0, help="Seconds between forced thoughts buffer flushes")
 
     args = parser.parse_args()
 
@@ -425,6 +432,7 @@ def main():
         max_retries=args.max_retries,
         headless=args.headless,
         sound=args.sound,
+        thoughts_flush_interval=args.thoughts_flush_interval,
     )
 
     agent.run(max_steps=args.max_steps)
