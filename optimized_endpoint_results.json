@@ -1,0 +1,32 @@
+[
+  {
+    "endpoint": "Original /game_state",
+    "samples": 10,
+    "avg_time_ms": 18.95444393157959,
+    "min_time_ms": 18.22185516357422,
+    "max_time_ms": 20.287036895751953,
+    "std_dev_ms": 0.6674383238660374,
+    "avg_size_bytes": 3367,
+    "total_size_kb": 32.880859375
+  },
+  {
+    "endpoint": "Optimized /game_state_fast",
+    "samples": 10,
+    "avg_time_ms": 6.880402565002441,
+    "min_time_ms": 6.244182586669922,
+    "max_time_ms": 10.362863540649414,
+    "std_dev_ms": 1.2463176615000484,
+    "avg_size_bytes": 382.9,
+    "total_size_kb": 3.7392578125
+  },
+  {
+    "endpoint": "No Screenshot /game_state_no_screenshot",
+    "samples": 10,
+    "avg_time_ms": 14.875435829162598,
+    "min_time_ms": 14.343976974487305,
+    "max_time_ms": 15.471696853637695,
+    "std_dev_ms": 0.3003706028590155,
+    "avg_size_bytes": 379,
+    "total_size_kb": 3.701171875
+  }
+]

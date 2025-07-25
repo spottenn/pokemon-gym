@@ -1,0 +1,79 @@
+{
+  "test_type": "streaming_load",
+  "avg_latency_ms": 10.694622993469238,
+  "max_latency_ms": 21.56662940979004,
+  "consistency_ms": 5.385829844156903,
+  "streaming_ready": true,
+  "data_points": [
+    {
+      "iteration": 0,
+      "latency_ms": 5.717992782592773,
+      "location": "PALLET TOWN",
+      "step_number": 0,
+      "screenshot_changed": false
+    },
+    {
+      "iteration": 1,
+      "latency_ms": 7.625102996826172,
+      "location": "PALLET TOWN",
+      "step_number": 0,
+      "screenshot_changed": false
+    },
+    {
+      "iteration": 2,
+      "latency_ms": 7.475852966308594,
+      "location": "PALLET TOWN",
+      "step_number": 0,
+      "screenshot_changed": false
+    },
+    {
+      "iteration": 3,
+      "latency_ms": 7.575511932373047,
+      "location": "PALLET TOWN",
+      "step_number": 0,
+      "screenshot_changed": false
+    },
+    {
+      "iteration": 4,
+      "latency_ms": 7.44318962097168,
+      "location": "PALLET TOWN",
+      "step_number": 0,
+      "screenshot_changed": false
+    },
+    {
+      "iteration": 5,
+      "latency_ms": 7.148981094360352,
+      "location": "PALLET TOWN",
+      "step_number": 0,
+      "screenshot_changed": false
+    },
+    {
+      "iteration": 6,
+      "latency_ms": 18.581628799438477,
+      "location": "PALLET TOWN",
+      "step_number": 0,
+      "screenshot_changed": false
+    },
+    {
+      "iteration": 7,
+      "latency_ms": 11.515617370605469,
+      "location": "PALLET TOWN",
+      "step_number": 0,
+      "screenshot_changed": false
+    },
+    {
+      "iteration": 8,
+      "latency_ms": 12.295722961425781,
+      "location": "PALLET TOWN",
+      "step_number": 0,
+      "screenshot_changed": false
+    },
+    {
+      "iteration": 9,
+      "latency_ms": 21.56662940979004,
+      "location": "PALLET TOWN",
+      "step_number": 0,
+      "screenshot_changed": false
+    }
+  ]
+}

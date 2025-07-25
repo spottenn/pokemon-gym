@@ -103,6 +103,25 @@ class GameStateResponse(BaseModel):
     screenshot_hash: Optional[str] = None  # Hash of screenshot for caching
 
 
+class OptimizedGameStateResponse(BaseModel):
+    player_name: str
+    rival_name: str
+    money: int
+    location: str
+    coordinates: List[int]
+    badges: List[str]
+    valid_moves: List[str]
+    inventory: List[Dict[str, Any]]
+    dialog: None | str
+    pokemons: List[Dict[str, Any]]
+    screenshot_hash: str  # Only hash, not full data
+    collision_map: None | str
+    step_number: int
+    execution_time: float
+    score: float = 0.0
+    screenshot_changed: bool = False  # Whether screenshot changed since last request
+
+
 class SaveStateRequest(BaseModel):
     filename: Optional[str] = None  # Optional custom filename
 
@@ -248,8 +267,13 @@ def log_response(response: GameStateResponse, action_type: str, action_details: 
 
 
 def get_screenshot_hash(screenshot_base64: str) -> str:
-    """Generate a hash for a screenshot."""
-    return hashlib.md5(screenshot_base64.encode()).hexdigest()
+    """Generate a hash for a screenshot with optimized algorithm."""
+    # Use first and last 1KB of data for faster hashing of large images
+    if len(screenshot_base64) > 2048:
+        sample_data = screenshot_base64[:1024] + screenshot_base64[-1024:]
+    else:
+        sample_data = screenshot_base64
+    return hashlib.md5(sample_data.encode()).hexdigest()
 
 
 def clean_screenshot_cache():
@@ -264,7 +288,7 @@ def clean_screenshot_cache():
         del SCREENSHOT_CACHE[key]
 
 
-def build_game_state_response(execution_time: float = 0.0) -> GameStateResponse:
+def build_game_state_response(execution_time: float = 0.0, include_screenshot: bool = True) -> GameStateResponse:
     """Build a GameStateResponse from current environment state."""
     global ENV, EVALUATOR, SCREENSHOT_CACHE
     
@@ -300,12 +324,66 @@ def build_game_state_response(execution_time: float = 0.0) -> GameStateResponse:
         inventory=state.inventory,
         dialog=state.dialog,
         pokemons=state.pokemons,
-        screenshot_base64=state.screenshot_base64,
+        screenshot_base64=state.screenshot_base64 if include_screenshot else "",
         collision_map=collision_map,
         step_number=ENV.steps_taken,
         execution_time=execution_time,
         score=EVALUATOR.total_score if EVALUATOR else 0.0,
         screenshot_hash=screenshot_hash
+    )
+
+
+# Keep track of last screenshot hash for optimization
+LAST_SCREENSHOT_HASH = None
+
+
+def build_optimized_game_state_response(execution_time: float = 0.0) -> OptimizedGameStateResponse:
+    """Build an optimized GameStateResponse with minimal data."""
+    global ENV, EVALUATOR, SCREENSHOT_CACHE, LAST_SCREENSHOT_HASH
+    
+    if ENV is None:
+        raise HTTPException(status_code=404, detail="Environment not initialized")
+    
+    # Get current game state from environment
+    state = ENV.state
+    
+    # Only get expensive operations when needed
+    valid_moves = ENV.get_valid_moves()
+    
+    # Handle screenshot caching with change detection
+    screenshot_hash = get_screenshot_hash(state.screenshot_base64)
+    screenshot_changed = screenshot_hash != LAST_SCREENSHOT_HASH
+    
+    if screenshot_changed:
+        # Clean cache periodically
+        if len(SCREENSHOT_CACHE) > 100:
+            clean_screenshot_cache()
+        
+        # Update cache only when screenshot changes
+        SCREENSHOT_CACHE[screenshot_hash] = (state.screenshot_base64, time.time())
+        LAST_SCREENSHOT_HASH = screenshot_hash
+    
+    # Skip collision map for performance (only needed for advanced gameplay)
+    collision_map = None
+    
+    # Build and return the optimized response
+    return OptimizedGameStateResponse(
+        player_name=state.player_name,
+        rival_name=state.rival_name,
+        money=state.money,
+        location=state.location,
+        coordinates=list(state.coordinates),
+        badges=state.badges,
+        valid_moves=valid_moves,
+        inventory=state.inventory,
+        dialog=state.dialog,
+        pokemons=state.pokemons,
+        screenshot_hash=screenshot_hash,
+        collision_map=collision_map,
+        step_number=ENV.steps_taken,
+        execution_time=execution_time,
+        score=EVALUATOR.total_score if EVALUATOR else 0.0,
+        screenshot_changed=screenshot_changed
     )
 
 
@@ -710,6 +788,26 @@ async def get_game_state():
     except Exception as e:
         logger.error(f"Error getting game state: {e}")
         raise HTTPException(status_code=500, detail=f"Error getting game state: {str(e)}")
+
+
+@app.get("/game_state_fast", response_model=OptimizedGameStateResponse)
+async def get_game_state_fast():
+    """Get optimized game state without screenshot data for better performance."""
+    try:
+        return build_optimized_game_state_response()
+    except Exception as e:
+        logger.error(f"Error getting optimized game state: {e}")
+        raise HTTPException(status_code=500, detail=f"Error getting optimized game state: {str(e)}")
+
+
+@app.get("/game_state_no_screenshot", response_model=GameStateResponse)
+async def get_game_state_no_screenshot():
+    """Get game state without screenshot for performance testing."""
+    try:
+        return build_game_state_response(include_screenshot=False)
+    except Exception as e:
+        logger.error(f"Error getting game state without screenshot: {e}")
+        raise HTTPException(status_code=500, detail=f"Error getting game state without screenshot: {str(e)}")
 
 
 @app.get("/screenshot/{screenshot_hash}")
