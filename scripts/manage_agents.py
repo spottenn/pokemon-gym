@@ -31,35 +31,68 @@ def get_agent_sessions(prompts: List[Dict]) -> List[Dict]:
     all_sessions = get_tmux_sessions()
     agent_sessions = []
     
+    # Track which agent types have running instances
     for prompt in prompts:
-        session_name = f"agent-{prompt['id']}"
-        is_running = session_name in all_sessions
+        agent_id = prompt['id']
+        running_instances = [s for s in all_sessions if s.startswith(f"agent-{agent_id}")]
+        
+        if running_instances:
+            # Multiple instances running
+            for session in running_instances:
+                instance_id = session.replace(f"agent-{agent_id}-", "") if "-" in session[len(f"agent-{agent_id}"):] else "default"
+                agent_sessions.append({
+                    'id': agent_id,
+                    'name': prompt['name'],
+                    'session_name': session,
+                    'instance_id': instance_id,
+                    'running': True
+                })
+        else:
+            # No instances running
+            agent_sessions.append({
+                'id': agent_id,
+                'name': prompt['name'],
+                'session_name': f"agent-{agent_id}",
+                'instance_id': None,
+                'running': False
+            })
+    
+    # Also check for custom agents
+    custom_sessions = [s for s in all_sessions if s.startswith("agent-custom-")]
+    for session in custom_sessions:
+        instance_id = session.replace("agent-custom-", "")
         agent_sessions.append({
-            'id': prompt['id'],
-            'name': prompt['name'],
-            'session_name': session_name,
-            'running': is_running
+            'id': 'custom',
+            'name': 'Custom Agent',
+            'session_name': session,
+            'instance_id': instance_id,
+            'running': True
         })
     
     return agent_sessions
 
 def list_agents(agent_sessions: List[Dict]):
     """List all agents and their status."""
-    print(f"\n{'ID':<25} {'Name':<30} {'Status':<10}")
-    print(f"{'-'*70}")
+    print(f"\n{'ID':<25} {'Name':<30} {'Instance':<15} {'Status':<10}")
+    print(f"{'-'*85}")
     
     for agent in agent_sessions:
         status = "Running" if agent['running'] else "Stopped"
-        print(f"{agent['id']:<25} {agent['name']:<30} {status:<10}")
+        instance = agent.get('instance_id', 'N/A') if agent['running'] else 'N/A'
+        print(f"{agent['id']:<25} {agent['name']:<30} {instance:<15} {status:<10}")
     
-    print(f"{'-'*70}")
+    print(f"{'-'*85}")
     running_count = sum(1 for a in agent_sessions if a['running'])
-    print(f"Total: {len(agent_sessions)} agents, {running_count} running")
+    total_unique = len(set(a['id'] for a in agent_sessions))
+    print(f"Total: {total_unique} agent types, {running_count} running instances")
 
-def get_agent_instance_path(agent_id: str, project_root: Path) -> Path:
+def get_agent_instance_path(agent_id: str, project_root: Path, instance_id: str = None) -> Path:
     """Get the path to an agent's project copy."""
     parent_dir = project_root.parent
-    return parent_dir / f"pokemon-gym-{agent_id}"
+    if instance_id:
+        return parent_dir / f"pokemon-gym-{agent_id}-{instance_id}"
+    else:
+        return parent_dir / f"pokemon-gym-{agent_id}"
 
 def create_project_copy(agent_id: str, source_dir: Path) -> Path:
     """Create a project copy for the agent."""
@@ -85,21 +118,21 @@ def start_agent(agent_id: str, prompts: List[Dict], project_root: Path) -> bool:
         print(f"❌ Agent '{agent_id}' not found in prompts")
         return False
     
-    session_name = f"agent-{agent_id}"
+    # Generate timestamp for unique instance
+    import datetime
+    timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    session_name = f"agent-{agent_id}-{timestamp}"
     
-    # Check if already running
-    if session_name in get_tmux_sessions():
-        print(f"⚠️  Agent '{agent_id}' is already running")
+    # Multiple instances are now allowed
+    print(f"🚀 Starting new instance of {agent_id} with timestamp {timestamp}")
+    
+    # Create project copy with timestamp
+    try:
+        copy_id = f"{agent_id}-{timestamp}"
+        instance_path = create_project_copy(copy_id, project_root)
+    except Exception as e:
+        print(f"❌ Failed to create project copy for {agent_id}: {e}")
         return False
-    
-    # Create or get project copy
-    instance_path = get_agent_instance_path(agent_id, project_root)
-    if not instance_path.exists():
-        try:
-            instance_path = create_project_copy(agent_id, project_root)
-        except Exception as e:
-            print(f"❌ Failed to create project copy for {agent_id}: {e}")
-            return False
     
     # Launch in tmux using the project copy
     claude_cmd = [
@@ -116,9 +149,9 @@ def start_agent(agent_id: str, prompts: List[Dict], project_root: Path) -> bool:
         print(f"❌ Failed to start {agent_id}: {e}")
         return False
 
-def cleanup_agent_work(agent_id: str, project_root: Path) -> bool:
+def cleanup_agent_work(agent_id: str, project_root: Path, instance_id: str = None) -> bool:
     """Create branch with agent's work and push it."""
-    instance_path = get_agent_instance_path(agent_id, project_root)
+    instance_path = get_agent_instance_path(agent_id, project_root, instance_id)
     
     if not instance_path.exists():
         print(f"No project copy found for {agent_id}")
@@ -135,9 +168,9 @@ def cleanup_agent_work(agent_id: str, project_root: Path) -> bool:
             print(f"Deleted project copy: {instance_path}")
             return True
         
-        # Create branch name with timestamp
-        timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-        branch_name = f"agent-{agent_id}-{timestamp}"
+        # Create branch name with instance timestamp
+        branch_suffix = instance_id if instance_id else datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+        branch_name = f"agent-{agent_id}-{branch_suffix}"
         
         print(f"Creating branch '{branch_name}' with {agent_id}'s changes...")
         
@@ -170,13 +203,31 @@ def cleanup_agent_work(agent_id: str, project_root: Path) -> bool:
         print(f"Project copy remains at: {instance_path}")
         return False
 
-def stop_agent(agent_id: str, project_root: Path = None, cleanup: bool = True) -> bool:
+def stop_agent(agent_id: str, project_root: Path = None, cleanup: bool = True, instance_id: str = None) -> bool:
     """Stop a specific agent and optionally cleanup its work."""
-    session_name = f"agent-{agent_id}"
+    all_sessions = get_tmux_sessions()
     
-    if session_name not in get_tmux_sessions():
-        print(f"⚠️  Agent '{agent_id}' is not running")
-        return False
+    if instance_id:
+        session_name = f"agent-{agent_id}-{instance_id}"
+        if session_name not in all_sessions:
+            print(f"⚠️  Agent '{agent_id}' instance '{instance_id}' is not running")
+            return False
+    else:
+        # Find any running instance of this agent
+        matching_sessions = [s for s in all_sessions if s.startswith(f"agent-{agent_id}")]
+        if not matching_sessions:
+            print(f"⚠️  No running instances of agent '{agent_id}' found")
+            return False
+        elif len(matching_sessions) > 1:
+            print(f"⚠️  Multiple instances of '{agent_id}' running:")
+            for session in matching_sessions:
+                instance = session.replace(f"agent-{agent_id}-", "") if "-" in session[len(f"agent-{agent_id}"):] else "default"
+                print(f"    {instance}")
+            print(f"Please specify instance ID: python manage_agents.py stop {agent_id} <instance_id>")
+            return False
+        else:
+            session_name = matching_sessions[0]
+            instance_id = session_name.replace(f"agent-{agent_id}-", "") if "-" in session_name[len(f"agent-{agent_id}"):] else None
     
     try:
         subprocess.run(['tmux', 'kill-session', '-t', session_name], check=True)
@@ -184,20 +235,37 @@ def stop_agent(agent_id: str, project_root: Path = None, cleanup: bool = True) -
         
         # Cleanup if requested and project_root provided
         if cleanup and project_root:
-            cleanup_agent_work(agent_id, project_root)
+            cleanup_agent_work(agent_id, project_root, instance_id)
         
         return True
     except subprocess.CalledProcessError as e:
         print(f"❌ Failed to stop {agent_id}: {e}")
         return False
 
-def attach_agent(agent_id: str) -> bool:
+def attach_agent(agent_id: str, instance_id: str = None) -> bool:
     """Attach to a specific agent session."""
-    session_name = f"agent-{agent_id}"
+    all_sessions = get_tmux_sessions()
     
-    if session_name not in get_tmux_sessions():
-        print(f"❌ Agent '{agent_id}' is not running")
-        return False
+    if instance_id:
+        session_name = f"agent-{agent_id}-{instance_id}"
+        if session_name not in all_sessions:
+            print(f"❌ Agent '{agent_id}' instance '{instance_id}' is not running")
+            return False
+    else:
+        # Find any running instance of this agent
+        matching_sessions = [s for s in all_sessions if s.startswith(f"agent-{agent_id}")]
+        if not matching_sessions:
+            print(f"❌ No running instances of agent '{agent_id}' found")
+            return False
+        elif len(matching_sessions) > 1:
+            print(f"⚠️ Multiple instances of '{agent_id}' running:")
+            for session in matching_sessions:
+                instance = session.replace(f"agent-{agent_id}-", "") if "-" in session[len(f"agent-{agent_id}"):] else "default"
+                print(f"    {instance}")
+            print(f"Please specify instance ID: python manage_agents.py attach {agent_id} <instance_id>")
+            return False
+        else:
+            session_name = matching_sessions[0]
     
     print(f"Attaching to {agent_id}... (Press Ctrl+B then D to detach)")
     try:
@@ -214,9 +282,9 @@ def stop_all_agents(agent_sessions: List[Dict], project_root: Path, cleanup: boo
         print("No agents are currently running")
         return
     
-    print(f"Stopping {len(running_agents)} running agents...")
+    print(f"Stopping {len(running_agents)} running agent instances...")
     for agent in running_agents:
-        stop_agent(agent['id'], project_root, cleanup)
+        stop_agent(agent['id'], project_root, cleanup, agent.get('instance_id'))
 
 def main():
     if len(sys.argv) < 2:
@@ -225,8 +293,10 @@ def main():
         print("  list                    # List all agents and their status")
         print("  start <agent_id>        # Start specific agent")
         print("  stop <agent_id>         # Stop specific agent (with cleanup)")
+        print("  stop <agent_id> <instance_id>  # Stop specific instance")
         print("  stop <agent_id> --no-cleanup  # Stop without creating branch")
         print("  attach <agent_id>       # Attach to agent session")
+        print("  attach <agent_id> <instance_id>  # Attach to specific instance")
         print("  cleanup <agent_id>      # Cleanup agent work (create branch & delete)")
         print("  stop-all                # Stop all running agents (with cleanup)")
         print("  stop-all --no-cleanup   # Stop all without creating branches")
@@ -277,11 +347,13 @@ def main():
             if running:
                 print("Running agents:")
                 for a in running:
-                    print(f"  {a['id']}")
+                    instance = a.get('instance_id', 'N/A') if a['running'] else 'N/A'
+                    print(f"  {a['id']} ({instance})")
             sys.exit(1)
         
         agent_id = sys.argv[2]
-        stop_agent(agent_id, project_root, cleanup)
+        instance_id = sys.argv[3] if len(sys.argv) > 3 and not sys.argv[3].startswith('--') else None
+        stop_agent(agent_id, project_root, cleanup, instance_id)
     
     elif command == 'attach':
         if len(sys.argv) < 3:
@@ -290,11 +362,13 @@ def main():
             if running:
                 print("Running agents:")
                 for a in running:
-                    print(f"  {a['id']}")
+                    instance = a.get('instance_id', 'N/A') if a['running'] else 'N/A'
+                    print(f"  {a['id']} ({instance})")
             sys.exit(1)
         
         agent_id = sys.argv[2]
-        attach_agent(agent_id)
+        instance_id = sys.argv[3] if len(sys.argv) > 3 else None
+        attach_agent(agent_id, instance_id)
     
     elif command == 'cleanup':
         if len(sys.argv) < 3:

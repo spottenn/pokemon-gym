@@ -81,9 +81,12 @@ def create_project_copy(agent_id: str, source_dir: Path) -> Path:
     
     return instance_path
 
-def launch_agent_in_tmux(agent: Dict, project_root: Path, custom_prompt: Optional[str] = None, append_text: Optional[str] = None):
+def launch_agent_in_tmux(agent: Dict, project_root: Path, append_text: Optional[str] = None, instance_id: Optional[str] = None):
     """Launch a single agent in its own tmux session with project copy."""
-    session_name = f"agent-{agent['id']}"
+    if instance_id:
+        session_name = f"agent-{agent['id']}-{instance_id}"
+    else:
+        session_name = f"agent-{agent['id']}"
     
     # Check if session already exists
     try:
@@ -96,18 +99,16 @@ def launch_agent_in_tmux(agent: Dict, project_root: Path, custom_prompt: Optiona
     
     # Create project copy for this agent
     try:
-        instance_path = create_project_copy(agent['id'], project_root)
+        copy_id = f"{agent['id']}-{instance_id}" if instance_id else agent['id']
+        instance_path = create_project_copy(copy_id, project_root)
     except Exception as e:
         print(f"❌ Failed to create project copy for {agent['name']}: {e}")
         return False
     
     # Determine the final prompt to use
-    if custom_prompt:
-        final_prompt = custom_prompt
-    else:
-        final_prompt = agent['prompt']
-        if append_text:
-            final_prompt = f"{final_prompt}\n\n{append_text}"
+    final_prompt = agent['prompt']
+    if append_text:
+        final_prompt = f"{final_prompt}\n\n{append_text}"
     
     # Create new tmux session and run a script that executes multiple claude commands
     # Use heredoc to avoid quote escaping issues
@@ -156,8 +157,7 @@ PROMPT3
 
 def main():
     parser = argparse.ArgumentParser(description="Simple tmux-based agent launcher.")
-    parser.add_argument('agents', nargs='*', help='Agent IDs to launch (or "all")')
-    parser.add_argument('-p', '--prompt', type=str, help='Custom prompt to use instead of predefined prompt')
+    parser.add_argument('agents', nargs='*', help='Agent IDs to launch, "all", or "custom" followed by quoted prompt')
     parser.add_argument('-a', '--append', type=str, help='Text to append to the predefined prompt')
     
     args = parser.parse_args()
@@ -170,7 +170,7 @@ def main():
         print("  python launch_agents.py test_agent         # Launch specific agent")
         print("  python launch_agents.py test_agent claude_code_auditor  # Launch multiple")
         print("  python launch_agents.py all                # Launch all agents")
-        print("  python launch_agents.py test_agent -p \"Custom prompt here\"  # Custom prompt")
+        print("  python launch_agents.py custom \"Your custom prompt here\"  # Custom agent")
         print("  python launch_agents.py claude_code_auditor -a \"Also audit the blink component\"  # Append text")
         print("\nAfter launching:")
         print("  - List sessions: tmux list-sessions")
@@ -191,8 +191,12 @@ def main():
     # Load and select agents
     prompts = load_prompts(str(prompts_file))
     
-    # Use command-line args if provided, otherwise interactive
-    if args.agents:
+    # Handle custom agent
+    custom_prompt = None
+    if args.agents and len(args.agents) >= 2 and args.agents[0] == 'custom':
+        custom_prompt = ' '.join(args.agents[1:])
+        selected_agents = [{'id': 'custom', 'name': 'Custom Agent', 'prompt': custom_prompt}]
+    elif args.agents:
         selected_agents = select_agents_by_args(prompts, args.agents)
     else:
         selected_agents = select_agents_interactive(prompts)
@@ -205,7 +209,11 @@ def main():
     
     launched = 0
     for agent in selected_agents:
-        if launch_agent_in_tmux(agent, project_root, args.prompt, args.append):
+        # Generate timestamp for multiple instances
+        import datetime
+        timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+        
+        if launch_agent_in_tmux(agent, project_root, args.append, timestamp):
             launched += 1
     
     print(f"\n✅ Successfully launched {launched}/{len(selected_agents)} agents")
