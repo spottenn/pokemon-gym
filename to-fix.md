@@ -1,2 +1,0 @@
-streaming mode doesnt stream.
-get_game_state should match the returned game state from the action endpoint You can abstract that into its own function and then call it from both the action endpoint and the getGameState endpoint.
