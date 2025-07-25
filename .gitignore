@@ -56,3 +56,7 @@ evaluation_sessions/
 /.venv/
 agent_log*.jsonl
 /llm_pokemon_scaffold/
+
+# Agent system files
+run_agent.sh
+*TEST*.txt

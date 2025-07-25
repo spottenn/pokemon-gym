@@ -109,6 +109,16 @@ fi
 pkill -f "python -m server.evaluator_server" 2>/dev/null || true
 
 echo ""
+echo "Fixing agents module imports..."
+# Fix demo_agent import issue in fresh clones
+if ! [ -f "agents/demo_agent.py" ]; then
+    sed -i '/from \.demo_agent import AIServerAgent/d' agents/__init__.py
+    echo "  ✓ Removed missing demo_agent import"
+else
+    echo "  ✓ demo_agent exists, no fix needed"
+fi
+
+echo ""
 echo "Testing vision agent import..."
 python -c "from agents.vision_agent import VisionAgent; print('✓ Vision agent works')" 2>/dev/null || echo "❌ Vision agent import failed"
 

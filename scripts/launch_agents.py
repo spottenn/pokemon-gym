@@ -7,8 +7,9 @@ import json
 import subprocess
 import sys
 import shutil
+import argparse
 from pathlib import Path
-from typing import List, Dict
+from typing import List, Dict, Optional
 
 def load_prompts(prompts_file: str) -> List[Dict]:
     """Load prompts from JSON file."""
@@ -80,7 +81,7 @@ def create_project_copy(agent_id: str, source_dir: Path) -> Path:
     
     return instance_path
 
-def launch_agent_in_tmux(agent: Dict, project_root: Path):
+def launch_agent_in_tmux(agent: Dict, project_root: Path, custom_prompt: Optional[str] = None, append_text: Optional[str] = None):
     """Launch a single agent in its own tmux session with project copy."""
     session_name = f"agent-{agent['id']}"
     
@@ -100,13 +101,21 @@ def launch_agent_in_tmux(agent: Dict, project_root: Path):
         print(f"❌ Failed to create project copy for {agent['name']}: {e}")
         return False
     
+    # Determine the final prompt to use
+    if custom_prompt:
+        final_prompt = custom_prompt
+    else:
+        final_prompt = agent['prompt']
+        if append_text:
+            final_prompt = f"{final_prompt}\n\n{append_text}"
+    
     # Create new tmux session and run a script that executes multiple claude commands
     # Use heredoc to avoid quote escaping issues
     script_content = f"""#!/bin/bash
 
 # First command - initial prompt (non-interactive)
 claude --dangerously-skip-permissions -p << 'PROMPT1'
-{agent['prompt']}
+{final_prompt}
 PROMPT1
 
 # Second command - validation check (non-interactive)  
@@ -118,7 +127,7 @@ PROMPT2
 claude --dangerously-skip-permissions --continue << 'PROMPT3'
 Here is your original prompt:
 
-{agent['prompt']}
+{final_prompt}
 
 Have you fully accomplished the goals? If not, please keep going autonomously until you have and you have tested your work end to end
 PROMPT3
@@ -146,15 +155,23 @@ PROMPT3
         return False
 
 def main():
+    parser = argparse.ArgumentParser(description="Simple tmux-based agent launcher.")
+    parser.add_argument('agents', nargs='*', help='Agent IDs to launch (or "all")')
+    parser.add_argument('-p', '--prompt', type=str, help='Custom prompt to use instead of predefined prompt')
+    parser.add_argument('-a', '--append', type=str, help='Text to append to the predefined prompt')
+    
+    args = parser.parse_args()
+    
+    # Handle help manually for backward compatibility
     if len(sys.argv) > 1 and sys.argv[1] in ['-h', '--help']:
-        print("Usage: python launch_agents.py [agent_id1 agent_id2 ... | all]")
-        print("\nSimple tmux-based agent launcher.")
-        print("Agents are auto-loaded from prompts.json")
+        parser.print_help()
         print("\nExamples:")
         print("  python launch_agents.py                    # Interactive selection")
         print("  python launch_agents.py test_agent         # Launch specific agent")
         print("  python launch_agents.py test_agent claude_code_auditor  # Launch multiple")
         print("  python launch_agents.py all                # Launch all agents")
+        print("  python launch_agents.py test_agent -p \"Custom prompt here\"  # Custom prompt")
+        print("  python launch_agents.py claude_code_auditor -a \"Also audit the blink component\"  # Append text")
         print("\nAfter launching:")
         print("  - List sessions: tmux list-sessions")
         print("  - Attach to agent: tmux attach -t agent-<id>")
@@ -175,8 +192,8 @@ def main():
     prompts = load_prompts(str(prompts_file))
     
     # Use command-line args if provided, otherwise interactive
-    if len(sys.argv) > 1:
-        selected_agents = select_agents_by_args(prompts, sys.argv[1:])
+    if args.agents:
+        selected_agents = select_agents_by_args(prompts, args.agents)
     else:
         selected_agents = select_agents_interactive(prompts)
     
@@ -188,7 +205,7 @@ def main():
     
     launched = 0
     for agent in selected_agents:
-        if launch_agent_in_tmux(agent, project_root):
+        if launch_agent_in_tmux(agent, project_root, args.prompt, args.append):
             launched += 1
     
     print(f"\n✅ Successfully launched {launched}/{len(selected_agents)} agents")
