@@ -59,6 +59,7 @@ Copy `.env.example` to `.env` and configure API keys:
 ### Local Development with Ollama
 For testing without API keys, use Ollama running on Windows (accessible from WSL):
 - Recommended model: `PetrosStav/gemma3-tools:4b` (pull with `ollama pull PetrosStav/gemma3-tools:4b`)
+- **Important**: Always use the full model name including `PetrosStav/` prefix when specifying `--model`
 - **Dynamic endpoint detection**: The system automatically detects the Windows host IP from WSL (commonly `172.31.160.1:11434`)
 - Use provider `ollama` when running agents - no additional configuration required
 
@@ -79,16 +80,16 @@ python -m server.evaluator_server --host 0.0.0.0 --port 8080 --sound
 ### Running Agents
 ```bash
 # LangGraph agent (recommended for complex gameplay)
-python agents/langgraph_agent.py --provider claude --headless
+python agents/langgraph_agent.py --provider ollama --model PetrosStav/gemma3-tools:4b --headless
 
 # Demo agent with streaming thoughts
-python agents/demo_agent.py --provider claude 
+python agents/demo_agent.py --provider ollama --model PetrosStav/gemma3-tools:4b
 
 # Human agent
 python agents/human_agent.py --sound
 
-# vision agent WIP
-python agents/vision_agent.py --placeholder-arg
+# Vision agent (streaming ready)
+python agents/vision_agent.py --provider ollama --model PetrosStav/gemma3-tools:4b
 ```
 
 ### Testing and Linting
@@ -133,7 +134,7 @@ powershell -ExecutionPolicy Bypass -File stop_streaming.ps1
 
 **Manual Setup:**
 1. Start evaluator server: `python -m server.evaluator_server --port 8081`
-2. Start vision agent: `python agents/vision_agent.py`  
+2. Start vision agent: `python agents/vision_agent.py --provider ollama --model PetrosStav/gemma3-tools:4b`  
 3. Start React dashboard: `cd streaming-dashboard && npm run dev --port 5174`
 4. Configure OBS to capture dashboard at `http://localhost:5174`
 
