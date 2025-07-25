@@ -91,6 +91,10 @@ class VisionAgent:
         # Simple memory system - keep last few actions and observations
         self.recent_actions: List[Dict] = []
         self.memory_limit = 10
+        
+        # Thoughts buffer for improved performance
+        self.thoughts_buffer: List[str] = []
+        self.buffer_flush_interval = 10  # Flush every 10 steps
 
         # Initialize LLM provider
         self.llm = LiteLLMProvider(
@@ -231,23 +235,38 @@ Available actions:
             return None
 
     def update_thoughts_file(self, thoughts: str, action_desc: str):
-        """Update the thoughts file for streaming display."""
+        """Update the thoughts file for streaming display with buffering."""
         import datetime
 
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        # Build log entry
+        log_entry = f"=== AI Vision Agent - Step {self.step_count} ===\n\n"
+        if thoughts:
+            log_entry += "VISUAL ANALYSIS:\n"
+            log_entry += thoughts
+            log_entry += "\n\n"
+        log_entry += f"ACTION: {action_desc}\n"
+        
+        # Add to buffer
+        self.thoughts_buffer.append(log_entry)
+        
+        # Flush buffer periodically or when it gets large
+        if len(self.thoughts_buffer) >= self.buffer_flush_interval or self.step_count % 50 == 0:
+            self.flush_thoughts_buffer()
+    
+    def flush_thoughts_buffer(self):
+        """Flush the thoughts buffer to disk."""
+        if not self.thoughts_buffer:
+            return
+            
         try:
-            # Append to persistent log file
             with open(self.thoughts_log_file, "a", encoding="utf-8") as f:
-                f.write(f"=== AI Vision Agent - Step {self.step_count} ===\n\n")
-                
-                if thoughts:
-                    f.write("VISUAL ANALYSIS:\n")
-                    f.write(thoughts)
-                    f.write("\n\n")
-                
-                f.write(f"ACTION: {action_desc}\n")
+                f.write('\n'.join(self.thoughts_buffer))
+                f.write('\n')
+            self.thoughts_buffer = []
         except Exception as e:
-            logger.error(f"Error updating thoughts files: {e}")
+            logger.error(f"Error flushing thoughts buffer: {e}")
 
     def add_to_memory(self, action_type: str):
         """Add action to simple memory."""
@@ -373,7 +392,12 @@ Available actions:
             # Small delay to prevent overwhelming the server
             time.sleep(0.5)
 
+        # Flush any remaining thoughts before exiting
+        self.flush_thoughts_buffer()
+        
         logger.info("Vision agent run completed")
+        logger.info(f"Total steps: {self.step_count}")
+        logger.info(f"Thoughts log: {self.thoughts_log_file}")
 
 
 def main():

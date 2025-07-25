@@ -6,7 +6,8 @@ import os
 import time
 import csv
 import datetime
-from typing import Dict, List, Any, Optional
+import hashlib
+from typing import Dict, List, Any, Optional, Tuple
 import threading  # For the timeout timer
 
 import uvicorn
@@ -35,6 +36,10 @@ SESSION_TIMER = None  # Timer to track 30 minute limit
 MAX_SESSION_DURATION = 4 * 60 * 60  # 30 minutes in seconds
 AUTOSAVE_INTERVAL = 50  # Automatically save every 50 steps
 AUTOSAVE_FILENAME = "autosave.state"  # Filename for autosave
+
+# Screenshot caching
+SCREENSHOT_CACHE: Dict[str, Tuple[str, float]] = {}  # hash -> (base64, timestamp)
+CACHE_EXPIRY_SECONDS = 300  # 5 minutes
 
 # Output directory structure
 OUTPUT_DIR = "gameplay_sessions"  # Base directory for all sessions
@@ -95,6 +100,7 @@ class GameStateResponse(BaseModel):
     step_number: int
     execution_time: float
     score: float = 0.0  # Add a score field to the response
+    screenshot_hash: Optional[str] = None  # Hash of screenshot for caching
 
 
 class SaveStateRequest(BaseModel):
@@ -241,9 +247,26 @@ def log_response(response: GameStateResponse, action_type: str, action_details: 
         logger.error(f"Error logging to CSV: {e}")
 
 
+def get_screenshot_hash(screenshot_base64: str) -> str:
+    """Generate a hash for a screenshot."""
+    return hashlib.md5(screenshot_base64.encode()).hexdigest()
+
+
+def clean_screenshot_cache():
+    """Remove expired entries from screenshot cache."""
+    global SCREENSHOT_CACHE
+    current_time = time.time()
+    expired_keys = [
+        key for key, (_, timestamp) in SCREENSHOT_CACHE.items()
+        if current_time - timestamp > CACHE_EXPIRY_SECONDS
+    ]
+    for key in expired_keys:
+        del SCREENSHOT_CACHE[key]
+
+
 def build_game_state_response(execution_time: float = 0.0) -> GameStateResponse:
     """Build a GameStateResponse from current environment state."""
-    global ENV, EVALUATOR
+    global ENV, EVALUATOR, SCREENSHOT_CACHE
     
     if ENV is None:
         raise HTTPException(status_code=404, detail="Environment not initialized")
@@ -254,6 +277,16 @@ def build_game_state_response(execution_time: float = 0.0) -> GameStateResponse:
     # Get collision map and valid moves
     collision_map = ENV.get_collision_map()
     valid_moves = ENV.get_valid_moves()
+    
+    # Handle screenshot caching
+    screenshot_hash = get_screenshot_hash(state.screenshot_base64)
+    
+    # Clean cache periodically
+    if len(SCREENSHOT_CACHE) > 100:
+        clean_screenshot_cache()
+    
+    # Update cache
+    SCREENSHOT_CACHE[screenshot_hash] = (state.screenshot_base64, time.time())
     
     # Build and return the response
     return GameStateResponse(
@@ -271,7 +304,8 @@ def build_game_state_response(execution_time: float = 0.0) -> GameStateResponse:
         collision_map=collision_map,
         step_number=ENV.steps_taken,
         execution_time=execution_time,
-        score=EVALUATOR.total_score if EVALUATOR else 0.0
+        score=EVALUATOR.total_score if EVALUATOR else 0.0,
+        screenshot_hash=screenshot_hash
     )
 
 
@@ -676,6 +710,18 @@ async def get_game_state():
     except Exception as e:
         logger.error(f"Error getting game state: {e}")
         raise HTTPException(status_code=500, detail=f"Error getting game state: {str(e)}")
+
+
+@app.get("/screenshot/{screenshot_hash}")
+async def get_screenshot(screenshot_hash: str):
+    """Get a screenshot by its hash."""
+    global SCREENSHOT_CACHE
+    
+    if screenshot_hash in SCREENSHOT_CACHE:
+        screenshot_base64, _ = SCREENSHOT_CACHE[screenshot_hash]
+        return {"screenshot_base64": screenshot_base64}
+    else:
+        raise HTTPException(status_code=404, detail="Screenshot not found in cache")
 
 
 @app.post("/stop")
