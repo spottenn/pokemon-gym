@@ -37,13 +37,15 @@ For the first setup with new instances of the repo:
 bash complete_setup.sh
 
 # OR manual setup:
-python3.11 -m venv .venv
+python3.11 -m venv .venv # "py -3.11 -m venv .venv"  on Windows
 source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
 # Copy Pokemon_Red.gb from another clone
 # Set up React dashboard in streaming-dashboard/
 ```
+
+The virtual environment is automatically activated via Claude Code hooks configuration.
 
 
 ### Environment Variables
@@ -132,7 +134,7 @@ powershell -ExecutionPolicy Bypass -File stop_streaming.ps1
 **Manual Setup:**
 1. Start evaluator server: `python -m server.evaluator_server --port 8081`
 2. Start vision agent: `python agents/vision_agent.py`  
-3. Start React dashboard: `cd streaming-dashboard && npm run dev -- --port 5174`
+3. Start React dashboard: `cd streaming-dashboard && npm run dev --port 5174`
 4. Configure OBS to capture dashboard at `http://localhost:5174`
 
 ### Session Management
