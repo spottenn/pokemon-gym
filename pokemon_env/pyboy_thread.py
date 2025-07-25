@@ -59,6 +59,8 @@ class PyBoyThread:
         self.run_thread: Optional[threading.Thread] = None
         self.running = False
         self.initialized = threading.Event()
+        self.screenshot_result: Optional[np.ndarray] = None
+        self.screenshot_ready = threading.Event()
         
     def _pyboy_worker(self, rom_path: str, headless: bool = True, sound: bool = False):
         """Worker thread that owns and operates the PyBoy instance."""
@@ -121,6 +123,10 @@ class PyBoyThread:
                         elif item == "set_emulation_speed":
                             speed = data
                             self.pyboy.set_emulation_speed(speed)
+                        elif item == "get_screenshot":
+                            # Capture screenshot in the worker thread
+                            self.screenshot_result = self.pyboy.screen.ndarray.copy()
+                            self.screenshot_ready.set()
                             
                     except queue.Empty:
                         # No commands, just tick
@@ -195,15 +201,24 @@ class PyBoyThread:
     
     def get_screen_ndarray(self) -> np.ndarray:
         """Get the current screen as a numpy array (thread-safe)."""
-        if not self.pyboy:
+        if not self.pyboy or not self.running:
             raise RuntimeError("PyBoy not initialized")
             
-        # Wait for queue to clear to ensure we get a stable frame
-        self.wait_for_queue(timeout=1)
-        time.sleep(0.1)  # Small delay for frame stability
+        # Clear the screenshot ready event
+        self.screenshot_ready.clear()
+        self.screenshot_result = None
         
-        # The screen.ndarray property is thread-safe for reading
-        return self.pyboy.screen.ndarray.copy()
+        # Queue the screenshot request
+        self.queue_action("get_screenshot", None)
+        
+        # Wait for the screenshot to be ready
+        if not self.screenshot_ready.wait(timeout=2):
+            raise RuntimeError("Screenshot capture timed out")
+            
+        if self.screenshot_result is None:
+            raise RuntimeError("Screenshot capture failed")
+            
+        return self.screenshot_result
     
     def get_screen_image(self) -> Image.Image:
         """Get the current screen as a PIL Image (thread-safe)."""
