@@ -101,13 +101,27 @@ def launch_agent_in_tmux(agent: Dict, project_root: Path):
         return False
     
     # Create new tmux session and run a script that executes multiple claude commands
-    # Properly escape single quotes in the prompts
-    escaped_prompt = agent['prompt'].replace("'", "'\"'\"'")
-    
+    # Use heredoc to avoid quote escaping issues
     script_content = f"""#!/bin/bash
-claude --dangerously-skip-permissions '{escaped_prompt}' -p
-claude --dangerously-skip-permissions --continue 'Have you thoroughly tested and validated your claims/audits, including end to end?' -p
-claude --dangerously-skip-permissions --continue 'Here is your original prompt: \n\n"{escaped_prompt}" \n\nhave you fully accomplished the goals? If not, please keep going autonomously until you have and you have tested your work end to end'
+
+# First command - initial prompt (non-interactive)
+claude --dangerously-skip-permissions -p << 'PROMPT1'
+{agent['prompt']}
+PROMPT1
+
+# Second command - validation check (non-interactive)  
+claude --dangerously-skip-permissions --continue -p << 'PROMPT2'
+Have you thoroughly tested and validated your claims/audits, including end to end?
+PROMPT2
+
+# Third command - completion check (interactive)
+claude --dangerously-skip-permissions --continue << 'PROMPT3'
+Here is your original prompt:
+
+{agent['prompt']}
+
+Have you fully accomplished the goals? If not, please keep going autonomously until you have and you have tested your work end to end
+PROMPT3
 """
     
     # Write the script to the instance directory
