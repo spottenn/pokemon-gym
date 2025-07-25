@@ -130,8 +130,8 @@ ACTION: wait [frames]
 Available actions:
 - press_key: [a, b, start, select, up, down, left, right]  
 - wait: [number of frames, e.g., 60]
-
-Remember: Make decisions based purely on what you see in the image. Analyze the visual elements carefully to determine the appropriate action."""
+- error: [description of the error]
+"""
 
         return prompt
 
@@ -385,16 +385,10 @@ def main():
     parser.add_argument("--model", default="PetrosStav/gemma3-tools:4b", help="Model name")
     parser.add_argument("--temperature", type=float, default=0.7, help="Temperature")
     parser.add_argument("--max-tokens", type=int, default=1500, help="Max tokens")
-    parser.add_argument(
-        "--max-steps", type=int, default=1000, help="Maximum steps to run"
-    )
+    parser.add_argument("--max-steps", type=int, default=1000, help="Maximum steps to run")
     parser.add_argument("--max-retries", type=int, default=3, help="Max LLM retries")
-    parser.add_argument(
-        "--headless", action="store_true", default=False, help="Run without game window"
-    )
-    parser.add_argument(
-        "--sound", action="store_true", default=False, help="Enable game sound"
-    )
+    parser.add_argument("--headless", action="store_true", default=False, help="Run without game window")
+    parser.add_argument("--sound", action="store_true", default=False, help="Enable game sound")
 
     args = parser.parse_args()
 
