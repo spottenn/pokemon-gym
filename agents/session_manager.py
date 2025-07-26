@@ -3,7 +3,6 @@ Session Management for Pokemon-Gym
 Handles session creation, saving, loading, and auto-resume functionality
 """
 import os
-import time
 import json
 import logging
 import shutil

@@ -11,20 +11,18 @@ import json
 import datetime
 import base64
 import io
-from typing import Dict, List, Any, Optional, Tuple, Union
+from typing import Dict, List, Any, Optional, Tuple
 from enum import Enum
 from PIL import Image
 from dotenv import load_dotenv
-import numpy as np
+import requests
+import litellm
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Load environment variables from .env file
 load_dotenv()
-
-import requests
-import litellm
 
 # Import our unified LLM provider
 try:

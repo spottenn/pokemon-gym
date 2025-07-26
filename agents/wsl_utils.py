@@ -1,7 +1,6 @@
 """
 WSL utilities for dynamic host configuration
 """
-import socket
 import subprocess
 import logging
 import os

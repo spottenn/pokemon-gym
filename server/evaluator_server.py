@@ -16,7 +16,7 @@ from pydantic import BaseModel
 from PIL import Image
 
 from pokemon_env import PokemonEnvironment
-from pokemon_env.action import Action, PressKey, Wait, ActionType
+from pokemon_env.action import PressKey, Wait
 from evaluator.evaluate import PokemonEvaluator  # Import the evaluator class
 
 # Set up logging
@@ -292,7 +292,7 @@ def force_stop_session():
                 # Also update the autosave file
                 autosave_path = os.path.join(current_session_dir, AUTOSAVE_FILENAME)
                 ENV.save_state(autosave_path)
-                logger.info(f"Updated autosave at timeout")
+                logger.info("Updated autosave at timeout")
             except Exception as e:
                 logger.error(f"Error saving game state at timeout: {e}")
                 
@@ -703,7 +703,7 @@ async def stop_environment():
         # Also update the autosave file
         autosave_path = os.path.join(current_session_dir, AUTOSAVE_FILENAME)
         ENV.save_state(autosave_path)
-        logger.info(f"Updated autosave at session end")
+        logger.info("Updated autosave at session end")
     except Exception as e:
         logger.error(f"Error saving final game state: {e}")
     

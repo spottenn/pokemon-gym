@@ -2,13 +2,10 @@ import argparse
 import base64
 import io
 import logging
-import os
-import time
 import requests
-import threading
 import pygame
 from PIL import Image
-from typing import Dict, List, Any, Optional
+from typing import Dict, Any
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
