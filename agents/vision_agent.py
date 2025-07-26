@@ -13,6 +13,7 @@ import base64
 import io
 from typing import Dict, List, Any, Optional, Tuple, Union
 from enum import Enum
+from pathlib import Path
 from PIL import Image
 from dotenv import load_dotenv
 import requests
@@ -232,9 +233,23 @@ You have two tools available:
         ]
         
         # Add conversation history (excluding very old entries)
+        # FIXME: Converting tool calls to text to avoid LiteLLM bugs with Ollama - this may not be the right approach
         history_start = max(0, len(self.conversation_history) - self.conversation_history_limit)
         for entry in self.conversation_history[history_start:]:
-            messages.append(entry)
+            if entry["role"] == "assistant" and "tool_calls" in entry and entry["tool_calls"]:
+                # Convert tool calls to text description
+                content = entry.get("content", "")
+                tool_call = entry["tool_calls"][0]
+                action_desc = f"I pressed {tool_call['arguments']['button']}" if tool_call["function"] == "press_button" else f"I waited {tool_call['arguments']['frames']} frames"
+                
+                messages.append({
+                    "role": "assistant", 
+                    "content": f"{content}\n\nAction taken: {action_desc}"
+                })
+            else:
+                # Regular message without tool calls
+                clean_entry = {"role": entry["role"], "content": entry["content"]}
+                messages.append(clean_entry)
         
         # Add current screenshot with analysis request
         user_message = {
@@ -461,12 +476,19 @@ You have two tools available:
             # Update thoughts file
             self.update_thoughts_file(cot_components, action_desc)
             
-            # Add to conversation history
-            self.conversation_history.append({
+            # Add to conversation history (store tool calls for later conversion)
+            history_entry = {
                 "role": "assistant",
-                "content": reasoning,
-                "tool_calls": [tool_call] if tool_call else []
-            })
+                "content": reasoning or "",
+            }
+            if tool_call:
+                history_entry["tool_calls"] = [tool_call]
+            
+            self.conversation_history.append(history_entry)
+            
+            # Keep history manageable
+            if len(self.conversation_history) > self.conversation_history_limit * 2:
+                self.conversation_history = self.conversation_history[-self.conversation_history_limit:]
             
             # Log the action
             logger.info(f"Step {self.step_count}: {action_desc} (Effort: {cot_components['effort']})")
@@ -482,14 +504,36 @@ You have two tools available:
         logger.info(f"Starting advanced vision agent for {max_steps} steps")
         logger.info(f"Using LiteLLM tool calling with model: {self.llm.model_name}")
         
-        # Try to resume latest session
-        latest_session = self.session_manager.get_latest_session()
+        # Try to resume latest session - look for server-created sessions first
+        latest_session = None
+        
+        # Look for sessions created by the server (have autosave.state files)
+        try:
+            sessions_dir = Path("gameplay_sessions")
+            if sessions_dir.exists():
+                server_sessions = []
+                for session_path in sessions_dir.iterdir():
+                    if session_path.is_dir() and session_path.name.startswith("session_"):
+                        autosave_path = session_path / "autosave.state"
+                        if autosave_path.exists():
+                            # Get modification time for sorting
+                            mtime = autosave_path.stat().st_mtime
+                            server_sessions.append((session_path.name, mtime))
+                
+                if server_sessions:
+                    # Sort by modification time (newest first)
+                    server_sessions.sort(key=lambda x: x[1], reverse=True)
+                    latest_session = server_sessions[0][0]
+                    logger.info(f"Found latest server session: {latest_session}")
+        except Exception as e:
+            logger.warning(f"Error looking for server sessions: {e}")
+        
+        # Fallback to session manager method if no server sessions found
+        if not latest_session:
+            latest_session = self.session_manager.get_latest_session()
+        
         if latest_session:
             logger.info(f"Resuming latest session: {latest_session}")
-            if self.session_manager.load_session(latest_session):
-                logger.info(f"Successfully loaded session data for: {latest_session}")
-            else:
-                logger.warning(f"Failed to load session data for: {latest_session}")
             init_data = {
                 "headless": self.headless,
                 "sound": self.sound,
@@ -497,6 +541,7 @@ You have two tools available:
                 "session_id": latest_session,
             }
         else:
+            logger.info("No previous sessions found, starting fresh")
             # New session
             init_data = {
                 "headless": self.headless,
