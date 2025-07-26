@@ -11,7 +11,7 @@ import json
 import datetime
 import base64
 import io
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Dict, List, Any, Optional, Tuple, Union
 from enum import Enum
 from PIL import Image
 from dotenv import load_dotenv
@@ -225,15 +225,6 @@ You have two tools available:
 - If stuck, try different approaches rather than repeating the same action
 - Remember this is a marathon, not a sprint - make steady progress"""
 
-    def analyze_screenshot_context(self, screenshot_b64: str) -> Dict[str, Any]:
-        """Analyze the screenshot to determine current game context."""
-        # This would ideally use a separate vision analysis, but for now we'll
-        # return a basic context that will be refined by the main LLM call
-        return {
-            "requires_analysis": True,
-            "timestamp": datetime.datetime.now().isoformat()
-        }
-
     def build_conversation_messages(self, screenshot_b64: str) -> List[Dict[str, Any]]:
         """Build the conversation messages including history and current screenshot."""
         messages = [
@@ -265,14 +256,14 @@ You have two tools available:
         
         return messages
 
-    def parse_tool_response(self, response: Dict[str, Any]) -> Tuple[Optional[str], Optional[Dict], Optional[Dict]]:
+    def parse_tool_response(self, response: Any) -> Tuple[Optional[str], Optional[Dict], Optional[Dict]]:
         """Parse LiteLLM response to extract reasoning and tool calls."""
         try:
             # Extract the main content (reasoning)
             content = response.choices[0].message.content or ""
             
             # Extract tool calls if present
-            tool_calls = response.choices[0].message.tool_calls
+            tool_calls = getattr(response.choices[0].message, 'tool_calls', None)
             
             if not tool_calls:
                 logger.warning("No tool calls found in response")
@@ -422,12 +413,12 @@ You have two tools available:
             
             for attempt in range(self.max_retries):
                 try:
-                    # Call LiteLLM with tools
+                    # Call LiteLLM with tools - using tool_choice="auto" instead of "required"
                     response = litellm.completion(
                         model=self.llm.model_name,
                         messages=messages,
                         tools=TOOLS,
-                        tool_choice="required",  # Force tool usage
+                        tool_choice="auto",  # Let model decide when to use tools
                         temperature=self.llm.temperature,
                         max_tokens=self.llm.max_tokens,
                     )
@@ -527,11 +518,16 @@ You have two tools available:
         
         # Main game loop
         consecutive_failures = 0
+        start_time = time.time()
+        
         for step in range(max_steps):
+            step_start = time.time()
             success = self.run_step()
+            step_duration = (time.time() - step_start) * 1000  # Convert to ms
             
             if success:
                 consecutive_failures = 0
+                logger.debug(f"Step completed in {step_duration:.1f}ms")
             else:
                 consecutive_failures += 1
                 logger.warning(f"Step failed ({consecutive_failures} consecutive failures)")
@@ -543,8 +539,11 @@ You have two tools available:
             # Small delay to prevent overwhelming the server
             time.sleep(0.3)
         
+        total_duration = time.time() - start_time
         logger.info("Vision agent run completed")
         logger.info(f"Total steps executed: {self.step_count}")
+        logger.info(f"Total duration: {total_duration:.1f}s")
+        logger.info(f"Average step time: {(total_duration / max(self.step_count, 1) * 1000):.1f}ms")
 
 
 def main():
