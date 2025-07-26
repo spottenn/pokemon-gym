@@ -23,7 +23,6 @@ import requests
 
 # LangChain imports
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
-from langchain_core.runnables import Runnable
 from pydantic import BaseModel, Field
 from langgraph.graph import StateGraph, END
 
@@ -590,7 +589,6 @@ Be strategic, observe carefully, and make decisions that will help you progress 
         Returns:
             Configured LangGraph
         """
-        import operator
 
         # Define the state schema
         class AgentState(BaseModel):
@@ -782,7 +780,7 @@ What can you observe in this image? Be specific about:
 
             # Add trace with synchronized step count
             state.pokemon_state.add_to_trace("think", "Calling LLM for thinking")
-            logger.info(f"THINKING: Calling LLM to generate thoughts and decide action")
+            logger.info("THINKING: Calling LLM to generate thoughts and decide action")
 
             # Set up retry parameters
             max_retries = 3
@@ -986,7 +984,7 @@ What can you observe in this image? Be specific about:
                 else:
                     # Invalid action type, use default
                     logger.info(
-                        f"EXECUTING: Default wait (10 frames) due to invalid action type"
+                        "EXECUTING: Default wait (10 frames) due to invalid action type"
                     )
                     game_state = self.pokemon_server.wait(10)
 
@@ -1337,7 +1335,7 @@ What can you observe in this image? Be specific about:
                 in_memory_section = False
                 in_task_section = False
                 current_section = "observe"
-                logger.debug(f"Found OBSERVE section")
+                logger.debug("Found OBSERVE section")
                 continue
 
             if line_lower.startswith("think:") or line_lower == "think":
@@ -1346,7 +1344,7 @@ What can you observe in this image? Be specific about:
                 in_memory_section = False
                 in_task_section = False
                 current_section = "think"
-                logger.debug(f"Found THINK section")
+                logger.debug("Found THINK section")
                 continue
 
             # Check for action line
@@ -1364,7 +1362,7 @@ What can you observe in this image? Be specific about:
                 in_memory_section = True
                 in_task_section = False
                 current_section = "memory"
-                logger.debug(f"Found MEMORY UPDATES section")
+                logger.debug("Found MEMORY UPDATES section")
                 continue
 
             # Check for task update section
@@ -1374,7 +1372,7 @@ What can you observe in this image? Be specific about:
                 in_memory_section = False
                 in_task_section = True
                 current_section = "task"
-                logger.debug(f"Found TASK UPDATE section")
+                logger.debug("Found TASK UPDATE section")
                 continue
 
             # Process based on current section
@@ -1444,13 +1442,13 @@ What can you observe in this image? Be specific about:
                             "frames": 10,
                         }
                         logger.warning(
-                            f"Failed to parse frames in wait action, using default 10"
+                            "Failed to parse frames in wait action, using default 10"
                         )
 
         # Default action if none parsed
         if not result["action"]:
             result["action"] = {"action_type": ActionType.WAIT, "frames": 10}
-            logger.warning(f"No action found in response, using default wait 10 frames")
+            logger.warning("No action found in response, using default wait 10 frames")
 
         # Log overall results
         action = result["action"]
@@ -1711,7 +1709,7 @@ What can you observe in this image? Be specific about:
             self.state = result["pokemon_state"]
 
             # Ensure step count is correctly synchronized
-            logger.info(f"Graph execution completed")
+            logger.info("Graph execution completed")
 
             # Update statistics
             self.stats["llm_calls"] += 1

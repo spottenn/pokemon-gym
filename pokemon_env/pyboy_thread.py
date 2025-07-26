@@ -4,9 +4,8 @@ Based on LLM Pokemon Scaffold's proven threading architecture.
 """
 import threading
 import queue
-import time
 import logging
-from typing import Optional, Tuple, Any
+from typing import Optional, Any
 from PIL import Image
 import numpy as np
 from pyboy import PyBoy

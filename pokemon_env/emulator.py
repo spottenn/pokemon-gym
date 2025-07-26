@@ -1,12 +1,10 @@
 import io
 import logging
 import pickle
-from collections import deque
 import heapq
 from typing import Dict, Any
 import time
 import threading
-from queue import Queue
 
 from .memory_reader import PokemonRedReader, StatusCondition
 from PIL import Image
@@ -524,7 +522,7 @@ class Emulator:
                 is_wall = terrain[end[0]][end[1]] == 0
                 if is_wall:
                     return (
-                        f"Partial Success: Your target location is a wall. In case this is intentional, attempting to navigate there.",
+                        "Partial Success: Your target location is a wall. In case this is intentional, attempting to navigate there.",
                         path,
                     )
                 else:
@@ -601,7 +599,7 @@ class Emulator:
         if closest_point != start:
             path = reconstruct_path(closest_point)
             return (
-                f"Partial Success: Could not reach the exact target, but found a path to the closest reachable point.",
+                "Partial Success: Could not reach the exact target, but found a path to the closest reachable point.",
                 path,
             )
 
