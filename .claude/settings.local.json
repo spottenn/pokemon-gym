@@ -42,6 +42,7 @@
       "Bash(grep:*)",
       "Bash(source:*)",
       "Bash(git fetch:*)",
+      "Bash(git fetch:*)",
       "Bash(find:*)",
       "Bash(tmux list-sessions:*)",
       "Bash(diff:*)"
