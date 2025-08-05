@@ -60,3 +60,4 @@ agent_log*.jsonl
 # Agent system files
 run_agent.sh
 *TEST*.txt
+.claude/settings.local.json
