@@ -58,6 +58,8 @@ class LiteLLMProvider:
                 "openrouter/"
             ):
                 return f"openrouter/{model_name}"
+            elif self.provider == "groq" and not model_name.startswith("groq/"):
+                return f"groq/{model_name}"
             else:
                 return model_name
 
@@ -68,6 +70,7 @@ class LiteLLMProvider:
             "gemini": "gemini/gemini-2.5-flash-lite-preview-06-17",
             "openrouter": "openrouter/meta-llama/llama-4-maverick",
             "ollama": "ollama/PetrosStav/gemma3-tools:4b",
+            "groq": "groq/llama-4-90b-chat-preview",
         }
 
         return defaults.get(self.provider, "claude-3-7-sonnet-20250219")
@@ -108,6 +111,13 @@ class LiteLLMProvider:
                 logger.info(f"Successfully connected to Ollama at {ollama_endpoint}")
             else:
                 logger.warning(f"Could not connect to Ollama at {ollama_endpoint}. Please ensure Ollama is running on Windows host.")
+        
+        elif self.provider == "groq":
+            api_key = os.getenv("GROQ_API_KEY")
+            if not api_key:
+                raise ValueError("GROQ_API_KEY environment variable not set")
+            os.environ["GROQ_API_KEY"] = api_key
+            
         else:
             raise ValueError(f"Unsupported provider: {self.provider}")
 

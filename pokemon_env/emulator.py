@@ -75,7 +75,7 @@ class Emulator:
             self.pyboy.set_emulation_speed(0)
             for _ in range(60):
                 self.pyboy.tick()
-            self.pyboy.set_emulation_speed(5)  # Fast speed for traditional mode
+            self.pyboy.set_emulation_speed(0)  # Fast speed for traditional mode
         
         logger.info(f"Emulator initialized in {'streaming' if self.streaming else 'traditional'} mode")
 
